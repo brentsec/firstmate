@@ -148,6 +148,21 @@ pane_process_flags() {
         }'
 }
 
+# Claude paints its permission-mode status line only after its process is
+# already visible in argv, so every screen assertion has to poll rather than
+# read once; a single read races the paint and fails a conforming worker.
+assert_screen() {  # <needle>
+  local needle=$1 screen=''
+  for _ in $(seq 1 60); do
+    screen=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
+      pane read "$TASK_PANE" --source detection --lines 120 2>/dev/null || true)
+    printf '%s\n' "$screen" | grep -Fi "$needle" >/dev/null && return 0
+    sleep 0.5
+  done
+  printf 'not ok - the pane never showed "%s"; last screen:\n%s\n' "$needle" "$screen" >&2
+  return 1
+}
+
 INITIAL_FLAGS=''
 for _ in $(seq 1 120); do
   INITIAL_FLAGS=$(pane_process_flags 2>/dev/null || true)
@@ -157,14 +172,7 @@ for _ in $(seq 1 120); do
 done
 printf '%s' "$INITIAL_FLAGS" | jq -e \
   '.has_claude == true and .has_bypass == true and .has_resume == false' >/dev/null
-INITIAL_SCREEN=''
-for _ in $(seq 1 60); do
-  INITIAL_SCREEN=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
-    pane read "$TASK_PANE" --source detection --lines 120)
-  printf '%s\n' "$INITIAL_SCREEN" | grep -Fi 'bypass permissions on' >/dev/null && break
-  sleep 0.5
-done
-printf '%s\n' "$INITIAL_SCREEN" | grep -Fi 'bypass permissions on' >/dev/null
+assert_screen 'bypass permissions on'
 printf 'ok - initial Firstmate Claude spawn is visibly in bypass mode\n'
 
 "$HERDR_LAB_HELPER" stop "$HERDR_LAB_SESSION" >/dev/null
@@ -179,14 +187,7 @@ for _ in $(seq 1 180); do
 done
 printf '%s' "$RESTORED_FLAGS" | jq -e \
   '.has_claude == true and .has_resume == true and .has_bypass == false and .has_auto == false' >/dev/null
-RESTORED_SCREEN=''
-for _ in $(seq 1 60); do
-  RESTORED_SCREEN=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
-    pane read "$TASK_PANE" --source detection --lines 120)
-  printf '%s\n' "$RESTORED_SCREEN" | grep -Fi 'manual mode' >/dev/null && break
-  sleep 0.5
-done
-printf '%s\n' "$RESTORED_SCREEN" | grep -Fi 'manual mode' >/dev/null
+assert_screen 'manual mode'
 printf 'ok - Herdr native restore reproduced claude --resume in visible manual mode\n'
 
 RESTORED_INFO=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
@@ -215,9 +216,7 @@ for _ in $(seq 1 120); do
 done
 printf '%s' "$DIRECT_COUNTER_FLAGS" | jq -e \
   '.has_claude == true and .has_resume == true and .has_bypass == true' >/dev/null
-DIRECT_COUNTER_SCREEN=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
-  pane read "$TASK_PANE" --source detection --lines 120 2>/dev/null || true)
-printf '%s\n' "$DIRECT_COUNTER_SCREEN" | grep -Fi 'bypass permissions on' >/dev/null
+assert_screen 'bypass permissions on'
 printf 'ok - adding only bypass to the same claude --resume restores visible bypass mode\n'
 
 "$HERDR_LAB_HELPER" stop "$HERDR_LAB_SESSION" >/dev/null
@@ -270,9 +269,7 @@ for _ in $(seq 1 120); do
 done
 printf '%s' "$RECOVERED_FLAGS" | jq -e \
   '.has_claude == true and .has_bypass == true and .has_resume == false' >/dev/null
-RECOVERED_SCREEN=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" \
-  pane read "$TASK_PANE" --source detection --lines 120 2>/dev/null || true)
-printf '%s\n' "$RECOVERED_SCREEN" | grep -Fi 'bypass permissions on' >/dev/null
+assert_screen 'bypass permissions on'
 [ "$(sed -n 's/^herdr_pane_id=//p' "$META" | tail -1)" = "$TASK_PANE" ]
 [ "$(sed -n 's/^worktree=//p' "$META" | tail -1)" = "$TASK_WT" ]
 [ -d "$TASK_WT" ]
