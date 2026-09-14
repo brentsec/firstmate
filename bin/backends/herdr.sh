@@ -2218,9 +2218,23 @@ EOF
 # to a tool. Exact argv boundaries are mandatory; flattened pane text or ps
 # output can contain the permission flag inside the worker prompt and is never
 # accepted as launch evidence.
+#
+# A protocol build that exposes no `argv` array at all is an observability gap,
+# not a contradiction: the posture is `unobserved` there, exactly as a
+# foreground tool is, so a Herdr release that stops reporting argv can never
+# degrade every Claude endpoint's recovery-grade liveness. An argv that IS
+# present but is not an array of strings is a response-shape contradiction and
+# stays `unreadable`.
+#
+# The whole identity scan is ONE jq pass over the payload rather than two calls
+# per foreground process: a watcher runs this for every Claude window on every
+# poll, so the classifier reads the pane once and forks at most one more jq for
+# the single attributed process's argv.
 fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto>
-  local session=$1 pane_id=$2 mode=$3 info count i name argv0 argv matches=0 matched_argv=
+  local session=$1 pane_id=$2 mode=$3 info rows first=1
+  local idx name argv0 argv_state argv matches=0 matched_index= matched_state=
   case "$mode" in bypass|auto) ;; *) printf 'unreadable'; return 0 ;; esac
+  command -v jq >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
   if ! command -v fm_claude_process_matches >/dev/null 2>&1; then
     # Generic Herdr callers do not pay for task-policy dependencies.
     # shellcheck source=bin/fm-claude-permission-lib.sh
@@ -2228,37 +2242,57 @@ fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto
   fi
   info=$(fm_backend_herdr_cli "$session" pane process-info --pane "$pane_id" 2>/dev/null) \
     || { printf 'unreadable'; return 0; }
-  printf '%s' "$info" | jq -e --arg pane "$pane_id" '
-    .result.type == "pane_process_info"
-    and .result.process_info.pane_id == $pane
-    and (.result.process_info.foreground_processes | type) == "array"
-  ' >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
-  count=$(printf '%s' "$info" | jq -er '.result.process_info.foreground_processes | length' 2>/dev/null) \
-    || { printf 'unreadable'; return 0; }
-  i=0
-  while [ "$i" -lt "$count" ]; do
-    name=$(printf '%s' "$info" | jq -r --argjson i "$i" \
-      '.result.process_info.foreground_processes[$i].name // empty' 2>/dev/null)
-    argv0=$(printf '%s' "$info" | jq -r --argjson i "$i" '
-      .result.process_info.foreground_processes[$i] as $p
-      | if ($p.argv | type) == "array"
-        then ($p.argv[0] // $p.argv0 // empty)
-        else ($p.argv0 // empty)
-        end' 2>/dev/null)
+  rows=$(printf '%s' "$info" | jq -r --arg pane "$pane_id" '
+    if .result.type == "pane_process_info"
+       and .result.process_info.pane_id == $pane
+       and (.result.process_info.foreground_processes | type) == "array"
+    then
+      "ok",
+      (.result.process_info.foreground_processes
+       | to_entries[]
+       | [ (.key | tostring),
+           ((.value.name | strings) // ""),
+           (if (.value.argv | type) == "array"
+            then ((.value.argv[0] | strings) // (.value.argv0 | strings) // "")
+            else ((.value.argv0 | strings) // "")
+            end),
+           (if (.value.argv | type) == "array" then "array"
+            elif .value.argv == null then "absent"
+            else "invalid"
+            end) ]
+       | @tsv)
+    else empty
+    end' 2>/dev/null) || { printf 'unreadable'; return 0; }
+  while IFS=$'\t' read -r idx name argv0 argv_state; do
+    if [ "$first" = 1 ]; then
+      first=0
+      [ "$idx" = ok ] || { printf 'unreadable'; return 0; }
+      continue
+    fi
     if fm_claude_process_matches "$name" "$argv0"; then
       matches=$((matches + 1))
-      argv=$(printf '%s' "$info" | jq -c --argjson i "$i" \
-        '.result.process_info.foreground_processes[$i].argv // null' 2>/dev/null) \
-        || { printf 'unreadable'; return 0; }
-      [ "$matches" -ne 1 ] || matched_argv=$argv
+      if [ "$matches" -eq 1 ]; then
+        matched_index=$idx
+        matched_state=$argv_state
+      fi
     fi
-    i=$((i + 1))
-  done
+  done <<EOF
+$rows
+EOF
   case "$matches" in
-    0) printf 'unobserved' ;;
-    1) fm_claude_argv_permission_state "$mode" "$matched_argv" ;;
-    *) printf 'ambiguous' ;;
+    0) printf 'unobserved'; return 0 ;;
+    1) ;;
+    *) printf 'ambiguous'; return 0 ;;
   esac
+  case "$matched_state" in
+    absent) printf 'unobserved'; return 0 ;;
+    array) ;;
+    *) printf 'unreadable'; return 0 ;;
+  esac
+  argv=$(printf '%s' "$info" | jq -c --argjson i "$matched_index" \
+    '.result.process_info.foreground_processes[$i].argv' 2>/dev/null) \
+    || { printf 'unreadable'; return 0; }
+  fm_claude_argv_permission_state "$mode" "$argv"
 }
 
 # fm_backend_herdr_pane_agent_state: classify <pane_id> in <session> as one of

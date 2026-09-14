@@ -37,7 +37,18 @@ CLAUDE_CREDENTIALS=${CLAUDE_CREDENTIALS:-$HOME/.claude/.credentials.json}
 }
 
 HERDR_LAB_SESSION=$("$HERDR_LAB_HELPER" name claude-permission-restore-e2e)
-trap '"$HERDR_LAB_HELPER" teardown "$HERDR_LAB_SESSION"' EXIT
+SCRATCH=
+# Every exit path runs under `set -euo pipefail`, so a failed assertion leaves
+# through this trap: it owns the lab teardown AND the disposable scratch tree,
+# whose generated worktrees and credential symlink must never accumulate across
+# failing runs. Preserving them for a post-mortem stays a deliberate choice.
+cleanup() {
+  "$HERDR_LAB_HELPER" teardown "$HERDR_LAB_SESSION"
+  if [ -n "$SCRATCH" ] && [ "${FM_CLAUDE_PERMISSION_RESTORE_E2E_KEEP_SCRATCH:-0}" != 1 ]; then
+    rm -rf "$SCRATCH"
+  fi
+}
+trap cleanup EXIT
 "$HERDR_LAB_HELPER" provision "$HERDR_LAB_SESSION" >/dev/null
 
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/fm-claude-permission-restore.XXXXXX")

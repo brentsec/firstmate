@@ -484,6 +484,32 @@ test_restored_claude_permission_posture_is_recovery_grade() {
   pass "Herdr recovery state detects restored Claude permission drift and refuses malformed or ambiguous argv"
 }
 
+# A worker running one of this repo's own claude-NAMED tools in its pane is the
+# reachable false-positive that would stop or duplicate-report a healthy agent,
+# and a build that reports no argv at all is an observability gap rather than a
+# contradiction. Neither may degrade the recovery-grade verdict.
+test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
+  local script_alone script_beside_agent argv_absent argv_absent_only
+  script_alone=$(claude_permission_state_case bypass \
+    '[{"name":"bash","argv0":"/repo/bin/fm-claude-trust.sh","argv":["/repo/bin/fm-claude-trust.sh"]}]')
+  script_beside_agent=$(claude_permission_state_case bypass \
+    '[{"name":"bash","argv0":"/repo/tests/fm-claude-trust.test.sh","argv":["/repo/tests/fm-claude-trust.test.sh"]},{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  argv_absent=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude"}]')
+  argv_absent_only=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":null}]')
+
+  [ "$script_alone" = alive ] \
+    || fail "a claude-named script must not be attributed as the worker, got '$script_alone'"
+  [ "$script_beside_agent" = alive ] \
+    || fail "a claude-named script beside a conforming worker must not read as duplicate ownership, got '$script_beside_agent'"
+  [ "$argv_absent" = alive ] \
+    || fail "a build that reports no argv must keep its liveness verdict, got '$argv_absent'"
+  [ "$argv_absent_only" = alive ] \
+    || fail "an explicitly null argv must keep its liveness verdict, got '$argv_absent_only'"
+  pass "Herdr Claude attribution requires exact identity and an absent argv never degrades liveness"
+}
+
 # --- stale agent registration over a shell-only pane (issue #4115) -----------
 #
 # Herdr keeps a Pi registration (`agent get` -> agent=pi, agent_status=idle)
@@ -5281,6 +5307,7 @@ test_cli_helper_sets_env_and_appends_trailing_session_flag
 test_agent_state_bypasses_a_stale_client_shadowing_a_compatible_one
 test_recovery_grade_read_widens_only_at_its_own_boundary
 test_restored_claude_permission_posture_is_recovery_grade
+test_claude_attribution_needs_exact_identity_and_never_degrades_liveness
 test_stale_registration_over_a_shell_only_pane_is_agent_free
 test_stale_registration_ignores_status_and_reads_the_process
 test_registered_agent_with_a_live_foreground_process_stays_alive

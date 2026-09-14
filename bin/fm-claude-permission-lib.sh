@@ -64,13 +64,27 @@ fm_claude_permission_flag() {  # <bypass|auto>
 # Match only process identity fields, never arbitrary command arguments.
 # Claude's packaged executable may expose either a claude-named kernel process
 # or a claude-named argv[0] path, so either exact identity surface is enough.
+#
+# The name must BE the executable's own name, never merely contain `claude`,
+# because this attribution is what licenses stopping and replacing a live
+# worker: a claude-NAMED script a healthy worker runs in its own pane
+# (bin/fm-claude-trust.sh, tests/fm-claude-*.test.sh - a shebang exec puts that
+# path in argv[0]) must never be attributed as the Claude process itself.
+# Anchoring at the start excludes every `fm-claude-*` tool in this repo, and
+# the script suffixes excluded below cover a claude-prefixed wrapper script.
+# Claude's own identity is the bare launcher name (verified shape on Herdr:
+# kernel name `node` with argv[0] `claude`, the same shape Pi presents -
+# docs/verification/runtime-backends.md "Stale agent registration"). A name
+# this rejects attributes no process at all, which is `unobserved` - the
+# fail-safe direction, never drift.
 fm_claude_process_matches() {  # <name> <argv0>
   local name=${1:-} argv0=${2:-} base
   for base in "$name" "$argv0"; do
     base=${base##*/}
     base=${base#-}
     case "$base" in
-      *claude*) return 0 ;;
+      *.sh|*.bash|*.zsh|*.py|*.rb|*.pl) continue ;;
+      claude|claude-*) return 0 ;;
     esac
   done
   return 1

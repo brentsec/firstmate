@@ -918,8 +918,16 @@ fm_backend_agent_state() {  # <backend> <target> [expected-harness] [claude-mode
 
 # Resolve the policy-aware recovery state for one exact task record. The
 # current home config is re-read on every call, so a restored process is judged
-# against the permission posture the next Firstmate launch would use. A malformed
-# record or permission config is unreadable, never permission to launch.
+# against the permission posture the next Firstmate launch would use. A
+# malformed record is unreadable, never permission to launch.
+#
+# The permission config is consulted only for a Claude task on a backend that
+# actually owns the policy-aware classifier, and only as an ADDITION to the
+# generic view. A config this home cannot parse blocks spawning a worker with
+# an unknown posture - that refusal lives in the spawn path - but it is not
+# itself evidence about a running process, so the endpoint keeps its generic
+# recovery-grade state here and the captain can still stop, interrupt, or
+# relaunch the fleet while the typo is repaired.
 fm_backend_agent_state_for_meta() {  # <meta-file> [config-dir]
   local meta=$1 config_dir=${2:-$FM_BACKEND_CONFIG_DIR} backend target harness mode
   [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'unreadable'; return 0; }
@@ -927,20 +935,20 @@ fm_backend_agent_state_for_meta() {  # <meta-file> [config-dir]
   target=$(fm_backend_target_of_meta "$meta")
   harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
   [ -n "$target" ] || { printf 'unreadable'; return 0; }
-  case "$harness" in
-    claude*)
+  case "$backend:$harness" in
+    herdr:claude*)
       # Load the policy owner only for task-aware Claude inspection. Generic
       # backend liveness and cleanup keep their historical dependency surface.
       # shellcheck source=bin/fm-claude-permission-lib.sh
       . "$FM_BACKEND_LIB_DIR/fm-claude-permission-lib.sh"
-      mode=$(fm_claude_permission_mode "$config_dir") || {
-        printf 'unreadable'
+      mode=$(fm_claude_permission_mode "$config_dir") || mode=
+      if [ -n "$mode" ]; then
+        fm_backend_agent_state "$backend" "$target" claude "$mode"
         return 0
-      }
-      fm_backend_agent_state "$backend" "$target" claude "$mode"
+      fi
       ;;
-    *) fm_backend_agent_state "$backend" "$target" ;;
   esac
+  fm_backend_agent_state "$backend" "$target"
 }
 
 # Backward-compatible three-state view for existing callers. A process with

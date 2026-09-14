@@ -1135,6 +1135,41 @@ test_spawn_autodetect_nesting_resolves_tmux_silently() {
   pass "fm-spawn.sh: auto-detect resolves nested tmux-in-herdr to tmux and stays silent end to end"
 }
 
+# fm_backend_agent_state_for_meta adds Claude posture to the recovery-grade
+# view; it must never SUBTRACT from it. A permission config this home cannot
+# parse refuses a spawn (tests/fm-spawn-dispatch-profile.test.sh), but it says
+# nothing about a running process, so the endpoint keeps its generic state and
+# the captain can still stop, interrupt, or relaunch the fleet. The policy read
+# is likewise scoped to the backend that owns the classifier.
+for_meta_dispatch() {  # <meta> <config-dir> -> the arguments the classifier received
+  (
+    # shellcheck disable=SC2317
+    fm_backend_agent_state() { printf 'args=%s' "$*"; }
+    fm_backend_agent_state_for_meta "$1" "$2" 2>/dev/null
+  )
+}
+
+test_agent_state_for_meta_adds_policy_without_subtracting_liveness() {
+  local dir=$TMP_ROOT/for-meta config=$TMP_ROOT/for-meta/config valid malformed on_tmux
+  mkdir -p "$dir" "$config"
+  fm_write_meta "$dir/herdr.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr"
+  fm_write_meta "$dir/tmux.meta" "window=firstmate:fm-x1" "harness=claude" "backend=tmux"
+
+  printf 'bypass\n' > "$config/claude-permission-mode"
+  valid=$(for_meta_dispatch "$dir/herdr.meta" "$config")
+  printf 'Bypass\n' > "$config/claude-permission-mode"
+  malformed=$(for_meta_dispatch "$dir/herdr.meta" "$config")
+  on_tmux=$(for_meta_dispatch "$dir/tmux.meta" "$config")
+
+  [ "$valid" = "args=herdr lab:w1:p2 claude bypass" ] \
+    || fail "a readable permission config must reach the Herdr classifier, got '$valid'"
+  [ "$malformed" = "args=herdr lab:w1:p2" ] \
+    || fail "an unparseable permission config must keep the generic recovery state, got '$malformed'"
+  [ "$on_tmux" = "args=tmux firstmate:fm-x1" ] \
+    || fail "a backend with no policy classifier must not consult the permission config, got '$on_tmux'"
+  pass "fm_backend_agent_state_for_meta: an unreadable policy never degrades endpoint liveness"
+}
+
 test_backend_name_precedence
 test_backend_detect_precedence
 test_backend_detect_cmux_fallback_bundle_id
@@ -1150,6 +1185,7 @@ test_backend_validate_refuses_unknown
 test_backend_source_shell_portable
 test_backend_validate_spawn_accepts_orca
 test_meta_get_and_backend_of_meta
+test_agent_state_for_meta_adds_policy_without_subtracting_liveness
 test_resolve_selector_three_forms
 test_backend_of_selector_matches_explicit_target_meta
 test_send_tmux_contract
