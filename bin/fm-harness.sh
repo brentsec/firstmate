@@ -228,8 +228,10 @@ harness_process_verdict() {  # <pid>
     # inherited launcher value, not an agy identity), so like muse it is
     # detected by ancestry alone.
     agy) echo "comm agy"; return ;;
-    node*|python*)
-      # Bare interpreter: match the harness name in its script path.
+    node|nodejs|python*)
+      # Bare interpreter: match the harness name in its script path. Keep Node
+      # exact so its node-MainThread worker name cannot make arbitrary Node
+      # arguments into harness identity evidence.
       args=$(ps -o args= -p "$pid" 2>/dev/null)
       if fm_gemini_args_are_gemini "$args"; then
         echo "args gemini"

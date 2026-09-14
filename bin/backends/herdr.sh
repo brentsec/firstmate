@@ -92,7 +92,6 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 # same rule (fm_backend_herdr_pane_process_state).
 # shellcheck source=bin/fm-agent-process-lib.sh
 . "$FM_BACKEND_HERDR_ROOT/bin/fm-agent-process-lib.sh"
-
 FM_BACKEND_HERDR_MIN_PROTOCOL=14
 # events.subscribe (the native pane.agent_status_changed push stream) and its
 # subscription_event schema first shipped at protocol 16 (verified: herdr
@@ -2143,7 +2142,10 @@ fm_backend_herdr_pane_process_state_sample() {  # <session> <pane_id>
       '.result.process_info.foreground_processes[$i].name // empty' 2>/dev/null)
     argv0=$(printf '%s' "$info" | jq -r --argjson i "$i" '
       .result.process_info.foreground_processes[$i] as $p
-      | (($p.argv // [])[0]) // $p.argv0 // empty' 2>/dev/null)
+      | if ($p.argv | type) == "array"
+        then ($p.argv[0] // $p.argv0 // empty)
+        else ($p.argv0 // empty)
+        end' 2>/dev/null)
     args=$(printf '%s' "$info" | jq -r --argjson i "$i" '
       .result.process_info.foreground_processes[$i] as $p
       | $p.cmdline // (($p.argv // []) | join(" ")) // empty' 2>/dev/null)
@@ -2199,6 +2201,64 @@ $(printf '%s\n' "$rows" | awk -v shell="$shell_pid" '
   }')
 EOF
   printf 'shell'
+}
+
+# fm_backend_herdr_claude_permission_state: inspect the exact foreground argv
+# arrays in one pane as conforming|drifted|ambiguous|unobserved|unreadable for
+# this home's selected Claude permission mode.
+#
+# Herdr's native session restoration synthesizes its own `claude --resume`
+# command instead of replaying Firstmate's launch command. A restored process
+# can therefore be a genuine registered Claude agent while silently losing the
+# unattended permission flag. This check is deliberately separate from generic
+# process liveness: one exact Claude process without the selected flag is
+# `drifted`, while more than one is `ambiguous` and may never authorize an
+# automatic lifecycle action. No matching foreground Claude is `unobserved`,
+# not drift, because a healthy Claude can temporarily hand the foreground pty
+# to a tool. Exact argv boundaries are mandatory; flattened pane text or ps
+# output can contain the permission flag inside the worker prompt and is never
+# accepted as launch evidence.
+fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto>
+  local session=$1 pane_id=$2 mode=$3 info count i name argv0 argv matches=0 matched_argv=
+  case "$mode" in bypass|auto) ;; *) printf 'unreadable'; return 0 ;; esac
+  if ! command -v fm_claude_process_matches >/dev/null 2>&1; then
+    # Generic Herdr callers do not pay for task-policy dependencies.
+    # shellcheck source=bin/fm-claude-permission-lib.sh
+    . "$FM_BACKEND_HERDR_ROOT/bin/fm-claude-permission-lib.sh"
+  fi
+  info=$(fm_backend_herdr_cli "$session" pane process-info --pane "$pane_id" 2>/dev/null) \
+    || { printf 'unreadable'; return 0; }
+  printf '%s' "$info" | jq -e --arg pane "$pane_id" '
+    .result.type == "pane_process_info"
+    and .result.process_info.pane_id == $pane
+    and (.result.process_info.foreground_processes | type) == "array"
+  ' >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
+  count=$(printf '%s' "$info" | jq -er '.result.process_info.foreground_processes | length' 2>/dev/null) \
+    || { printf 'unreadable'; return 0; }
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    name=$(printf '%s' "$info" | jq -r --argjson i "$i" \
+      '.result.process_info.foreground_processes[$i].name // empty' 2>/dev/null)
+    argv0=$(printf '%s' "$info" | jq -r --argjson i "$i" '
+      .result.process_info.foreground_processes[$i] as $p
+      | if ($p.argv | type) == "array"
+        then ($p.argv[0] // $p.argv0 // empty)
+        else ($p.argv0 // empty)
+        end' 2>/dev/null)
+    if fm_claude_process_matches "$name" "$argv0"; then
+      matches=$((matches + 1))
+      argv=$(printf '%s' "$info" | jq -c --argjson i "$i" \
+        '.result.process_info.foreground_processes[$i].argv // null' 2>/dev/null) \
+        || { printf 'unreadable'; return 0; }
+      [ "$matches" -ne 1 ] || matched_argv=$argv
+    fi
+    i=$((i + 1))
+  done
+  case "$matches" in
+    0) printf 'unobserved' ;;
+    1) fm_claude_argv_permission_state "$mode" "$matched_argv" ;;
+    *) printf 'ambiguous' ;;
+  esac
 }
 
 # fm_backend_herdr_pane_agent_state: classify <pane_id> in <session> as one of
@@ -2324,6 +2384,13 @@ fm_backend_herdr_server_running_state() {  # <session>
 # registered agent with a live process is `alive`, and an unexpected or failed
 # API read is `unreadable`.
 #
+# When the optional expected harness is Claude, a live process is also checked
+# against the selected permission mode. One exact Claude argv without that flag
+# is `permission-drift`; multiple foreground Claude processes are `ambiguous`;
+# a tool temporarily holding the foreground leaves the generic live verdict in
+# place. This is the recovery boundary for runtime-native session restoration:
+# restored process existence is not treated as proof of a valid worker launch.
+#
 # One exception to that last case, and it is deliberately made HERE rather than
 # in the husk classifier: a read can fail because the recorded session's server
 # is not running at all, which is authoritative absence for every pane in that
@@ -2337,13 +2404,26 @@ fm_backend_herdr_server_running_state() {  # <session>
 # on exactly the reads they refused on before. A server that is running, or
 # whose state cannot itself be read, still yields `unreadable` here too: absence
 # is claimed only from positive evidence of it.
-fm_backend_herdr_agent_state() {  # <target>
-  local target=$1
+fm_backend_herdr_agent_state() {  # <target> [expected-harness] [claude-mode]
+  local target=$1 expected_harness=${2:-} claude_mode=${3:-} permission_state
   fm_backend_herdr_parse_target "$target" || { printf 'unreadable'; return 0; }
   case "$(fm_backend_herdr_pane_agent_state "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE")" in
     dead) printf 'missing' ;;
     no-agent|stale-agent) printf 'dead' ;;
-    live) printf 'alive' ;;
+    live)
+      if [ "$expected_harness" = claude ] && [ -n "$claude_mode" ]; then
+        permission_state=$(fm_backend_herdr_claude_permission_state \
+          "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" "$claude_mode")
+        case "$permission_state" in
+          conforming|unobserved) printf 'alive' ;;
+          drifted) printf 'permission-drift' ;;
+          ambiguous) printf 'ambiguous' ;;
+          *) printf 'unreadable' ;;
+        esac
+      else
+        printf 'alive'
+      fi
+      ;;
     *)
       case "$(fm_backend_herdr_server_running_state "$FM_BACKEND_HERDR_SESSION")" in
         stopped) printf 'missing' ;;
@@ -2355,9 +2435,9 @@ fm_backend_herdr_agent_state() {  # <target>
 
 # Backward-compatible three-state view for callers that only need a yes/no
 # agent verdict. The detailed state contract is owned by fm_backend_agent_state.
-fm_backend_herdr_agent_alive() {  # <target>
-  case "$(fm_backend_herdr_agent_state "$1")" in
-    alive) printf 'alive' ;;
+fm_backend_herdr_agent_alive() {  # <target> [expected-harness] [claude-mode]
+  case "$(fm_backend_herdr_agent_state "$@")" in
+    alive|permission-drift) printf 'alive' ;;
     dead|missing) printf 'dead' ;;
     *) printf 'unknown' ;;
   esac

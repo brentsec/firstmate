@@ -49,6 +49,34 @@ trap relaunch_cleanup EXIT
 # The same lifecycle-modelling tmux stub as tests/fm-control.test.sh: the
 # harness's exit command stops the agent, and a launch-brief literal starts the
 # harness named in `becomes`.
+make_herdr_duplicate_stub() {  # <dir>
+  local fb="$1/fakebin"
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >> "$FM_FAKE_DIR/herdr.log"
+case "${1:-} ${2:-}" in
+  "pane get")
+    printf '{"result":{"pane":{"pane_id":"%s","cwd":"%s"}}}\n' "${3:-}" "$FM_FAKE_DIR/../wt"
+    ;;
+  "agent get")
+    printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n'
+    ;;
+  "pane process-info")
+    pane=""
+    while [ "$#" -gt 0 ]; do
+      [ "$1" != --pane ] || { pane=${2:-}; break; }
+      shift
+    done
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":424200,"foreground_processes":[{"pid":424201,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]},{"pid":424202,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane"
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$fb/herdr"
+  : > "$1/fake/herdr.log"
+}
+
 make_tmux_stub() {  # <dir>
   local fb="$1/fakebin"
   mkdir -p "$fb"
@@ -304,6 +332,46 @@ SH
   chmod +x "$dir/fakebin/tasks-axi"
 }
 
+test_relaunch_refuses_ambiguous_restored_claude_duplicates() {
+  local dir out rc before_meta
+  dir=$(new_case herdr-duplicate rl44)
+  add_ship_task "$dir" rl44 claude
+  {
+    printf '%s\n' 'window=lab:w1:p2'
+    printf '%s\n' 'endpoint_task_id=rl44'
+    printf '%s\n' "worktree=$dir/wt"
+    printf '%s\n' "project=$dir/proj"
+    printf '%s\n' 'harness=claude'
+    printf '%s\n' 'kind=ship'
+    printf '%s\n' 'mode=no-mistakes'
+    printf '%s\n' 'yolo=off'
+    printf '%s\n' 'tasktmp=/tmp/fm-rl44'
+    printf '%s\n' 'model=default'
+    printf '%s\n' 'effort=default'
+    printf '%s\n' 'backend=herdr'
+    printf '%s\n' 'herdr_session=lab'
+    printf '%s\n' 'herdr_workspace_id=w1'
+    printf '%s\n' 'herdr_tab_id=w1:t1'
+    printf '%s\n' 'herdr_pane_id=w1:p2'
+  } > "$dir/home/state/rl44.meta"
+  make_herdr_duplicate_stub "$dir"
+  before_meta=$(cat "$dir/home/state/rl44.meta")
+
+  out=$(run_control "$dir" rl44 relaunch --note "do not trust restored duplicates"); rc=$?
+  [ "$rc" -ne 0 ] || fail "ambiguous restored Claude duplicates must refuse relaunch"
+  assert_contains "$out" "reads 'ambiguous'" \
+    "the public control plane must name the ambiguous process ownership"
+  [ "$(cat "$dir/home/state/rl44.meta")" = "$before_meta" ] \
+    || fail "an ambiguous duplicate refusal changed the task endpoint record"
+  assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-text" \
+    "an ambiguous duplicate refusal must not type a lifecycle command"
+  assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-keys" \
+    "an ambiguous duplicate refusal must not send a lifecycle key"
+  [ -z "$(git -C "$dir/wt" status --porcelain)" ] \
+    || fail "an ambiguous duplicate refusal changed the isolated copy"
+  pass "fm-control refuses ambiguous restored Claude duplicates without touching the endpoint or copy"
+}
+
 # --- 1. same-harness relaunch -----------------------------------------------
 
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
@@ -328,6 +396,10 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
     || fail "the transaction journal should end complete"
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
   assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
+  assert_contains "$(cat "$dir/fake/literal")" "claude --dangerously-skip-permissions" \
+    "the replacement Claude must explicitly reapply bypass permissions"
+  assert_not_contains "$(cat "$dir/fake/literal")" "claude --permission-mode auto" \
+    "the default relaunch must not silently change permission posture"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
 }
 
@@ -367,6 +439,27 @@ test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven() {
   assert_no_grep "/exit" "$dir/fake/literal" \
     "the exit command must not be typed when the composer state is not proven empty"
   pass "fm-control relaunch: an unreadable composer fails safe before the exit command is typed"
+}
+
+test_same_harness_relaunch_reapplies_configured_auto_permissions() {
+  local dir out rc literals
+  dir=$(new_case same-auto rl43)
+  add_ship_task "$dir" rl43 claude
+  mkdir -p "$dir/home/config"
+  printf 'auto\n' > "$dir/home/config/claude-permission-mode"
+
+  out=$(run_control "$dir" rl43 relaunch --note "restore unattended auto permissions"); rc=$?
+  expect_code 0 "$rc" "a configured-auto same-task relaunch should succeed"$'\n'"$out"
+  literals=$(cat "$dir/fake/literal")
+  assert_contains "$literals" "claude --permission-mode auto" \
+    "the replacement Claude must explicitly reapply configured auto permissions"
+  assert_not_contains "$literals" "--dangerously-skip-permissions" \
+    "the configured-auto relaunch must not fall back to bypass permissions"
+  [ "$(meta_field "$dir" rl43 window)" = "fmses:fm-rl43" ] \
+    || fail "the configured-auto relaunch must preserve its endpoint"
+  [ "$(meta_field "$dir" rl43 worktree)" = "$dir/wt" ] \
+    || fail "the configured-auto relaunch must preserve its isolated copy"
+  pass "fm-control relaunch reapplies the selected Claude permission mode in the same endpoint and copy"
 }
 
 test_relaunch_from_linked_home_preserves_recorded_worktree() {
@@ -1603,9 +1696,11 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
   pass "relaunch heals an item that drifted out of In flight while the task stayed live"
 }
 
+test_relaunch_refuses_ambiguous_restored_claude_duplicates
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
+test_same_harness_relaunch_reapplies_configured_auto_permissions
 test_relaunch_from_linked_home_preserves_recorded_worktree
 test_relaunch_preserves_durable_task_metadata
 test_relaunch_serializes_concurrent_durable_metadata_publication

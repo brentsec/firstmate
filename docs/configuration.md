@@ -356,9 +356,13 @@ The token is the file's whitespace-trimmed content.
 `bypass` keeps today's launch, `claude --dangerously-skip-permissions`, and is also the default when the file is absent, so an unconfigured home launches byte-for-byte as before.
 `auto` replaces that flag with `--permission-mode auto`, Claude Code's classifier-reviewed permission mode, for a captain who refuses to run workers in bypass mode; every other part of the Claude launch, including its environment prefix, inline settings, model, and effort flags, is unchanged.
 Any other value, or an unreadable file, refuses every spawn from that home, whichever harness it would launch, before any endpoint, worktree, or task record exists, and names the accepted values; Firstmate never falls back to a permission posture the captain did not choose.
-`bin/fm-spawn.sh` reads the file on every spawn and relaunch, so a change takes effect at the next launch without a restart.
+`bin/fm-claude-permission-lib.sh` owns parsing and the exact mode-to-flag mapping, and every Firstmate spawn or relaunch reads it fresh, so changing the file requires no Firstmate process restart and takes effect at the next Firstmate-owned launch.
+A terminal provider's native session restoration is not a Firstmate relaunch and may synthesize `claude --resume` without replaying the selected permission flag.
+On Herdr, the policy-aware recovery state therefore checks the running Claude process's exact argv, reports `permission-drift` when that flag is absent, refuses ambiguous duplicate-Claude process sets, and routes one attributed drifted process through the ordinary transactional relaunch in its same endpoint and worktree.
+Generic process liveness still treats that process as alive for duplicate prevention, and a temporary foreground tool does not become false drift.
 The file is a captain-wide safety preference, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract; a secondmate's own Claude crewmates then launch on the same posture.
-The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches and which once-per-machine dialog each one can meet.
+This setting controls worker command approval only; merge authority and destructive, irreversible, security-sensitive, and ask-user decisions remain under their separate Firstmate authority contracts.
+The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches, restoration recovery, and which once-per-machine dialog each mode can meet.
 
 ## Worker launch environment (config/launch-env-allowlist)
 

@@ -267,7 +267,12 @@ test_version_check_refuses_missing_herdr() {
   local dir out status
   dir="$TMP_ROOT/version-missing"; mkdir -p "$dir/empty-fakebin"
   out=$( PATH="$dir/empty-fakebin:/usr/bin:/bin" \
-    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_version_check' "$ROOT" 2>&1 )
+    bash -c '. "$0/bin/backends/herdr.sh"
+      command() {
+        if [ "${1:-}" = -v ] && [ "${2:-}" = herdr ]; then return 1; fi
+        builtin command "$@"
+      }
+      fm_backend_herdr_version_check' "$ROOT" 2>&1 )
   status=$?
   [ "$status" -ne 0 ] || fail "version_check should refuse when herdr is not installed"
   assert_contains "$out" "not installed" "version_check did not report herdr as missing"
@@ -417,6 +422,66 @@ test_recovery_grade_read_widens_only_at_its_own_boundary() {
   [ "$husk" = "unknown refused" ] \
     || fail "the stopped-server rule leaked into the husk classifier, which licenses closing panes: got '$husk'"
   pass "herdr recovery-grade read: a stopped server means missing there, and nowhere else"
+}
+
+# --- restored Claude permission posture -------------------------------------
+
+claude_permission_state_case() {  # <mode> <foreground-json> [with-policy]
+  local mode=$1 foreground=$2 with_policy=${3:-yes}
+  FM_TEST_FOREGROUND="$foreground" FM_TEST_MODE="$mode" FM_TEST_WITH_POLICY="$with_policy" \
+    bash -c '. "$0/bin/backends/herdr.sh"
+      fm_backend_herdr_pane_agent_state() { printf live; }
+      fm_backend_herdr_cli() {
+        printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"foreground_processes\":%s}}}\n" "$FM_TEST_FOREGROUND"
+      }
+      if [ "$FM_TEST_WITH_POLICY" = yes ]; then
+        fm_backend_herdr_agent_state fmtest:w1:p2 claude "$FM_TEST_MODE"
+      else
+        fm_backend_herdr_agent_state fmtest:w1:p2
+      fi' "$ROOT"
+}
+
+test_restored_claude_permission_posture_is_recovery_grade() {
+  local bypass auto auto_equals restored conflicting malformed duplicate tool prompt_mentions_flag generic
+  bypass=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  auto=$(claude_permission_state_case auto \
+    '[{"name":"node","argv0":"claude","argv":["claude","--permission-mode","auto"]}]')
+  auto_equals=$(claude_permission_state_case auto \
+    '[{"name":"node","argv0":"claude","argv":["claude","--permission-mode=auto"]}]')
+  restored=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
+  conflicting=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]}]')
+  malformed=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":"claude --dangerously-skip-permissions"}]')
+  prompt_mentions_flag=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","prompt text mentions --dangerously-skip-permissions"]}]')
+  duplicate=$(claude_permission_state_case bypass \
+    '[{"name":"claude","argv":["claude","--resume","session-123"]},{"name":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  tool=$(claude_permission_state_case bypass \
+    '[{"name":"git","argv0":"git","argv":["git","status"]}]')
+  generic=$(claude_permission_state_case bypass \
+    '[{"name":"claude","argv":["claude","--resume","session-123"]}]' no)
+
+  [ "$bypass" = alive ] || fail "an initial bypass launch should be alive, got '$bypass'"
+  [ "$auto" = alive ] || fail "an explicit auto launch should be alive, got '$auto'"
+  [ "$auto_equals" = alive ] || fail "an explicit --permission-mode=auto launch should be alive, got '$auto_equals'"
+  [ "$restored" = permission-drift ] \
+    || fail "Herdr's claude --resume without bypass should be permission-drift, got '$restored'"
+  [ "$conflicting" = ambiguous ] \
+    || fail "one Claude process carrying conflicting permission flags must be ambiguous, got '$conflicting'"
+  [ "$malformed" = unreadable ] \
+    || fail "a flattened argv string must stay unreadable, got '$malformed'"
+  [ "$prompt_mentions_flag" = permission-drift ] \
+    || fail "a flag mentioned only inside prompt text must not satisfy exact argv, got '$prompt_mentions_flag'"
+  [ "$duplicate" = ambiguous ] \
+    || fail "multiple foreground Claude processes must be ambiguous, got '$duplicate'"
+  [ "$tool" = alive ] \
+    || fail "a temporary foreground tool must preserve the registered live verdict, got '$tool'"
+  [ "$generic" = alive ] \
+    || fail "callers without task policy must retain generic process liveness, got '$generic'"
+  pass "Herdr recovery state detects restored Claude permission drift and refuses malformed or ambiguous argv"
 }
 
 # --- stale agent registration over a shell-only pane (issue #4115) -----------
@@ -5215,6 +5280,7 @@ test_workspace_label_different_secondmates_get_different_labels
 test_cli_helper_sets_env_and_appends_trailing_session_flag
 test_agent_state_bypasses_a_stale_client_shadowing_a_compatible_one
 test_recovery_grade_read_widens_only_at_its_own_boundary
+test_restored_claude_permission_posture_is_recovery_grade
 test_stale_registration_over_a_shell_only_pane_is_agent_free
 test_stale_registration_ignores_status_and_reads_the_process
 test_registered_agent_with_a_live_foreground_process_stays_alive

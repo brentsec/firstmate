@@ -155,13 +155,17 @@ case "${1:-}" in
         exit 0 ;;
       process-info)
         # The process-level view a registration is verified against (#4115):
-        # `agent` puts a live claude in the foreground, `shell` a bare zsh whose
-        # pid is the test script itself (a real, long-lived process with no
-        # harness descendant, so the adapter's real process-table walk finds
-        # it), and anything else answers nothing (unreadable).
+        # `agent` puts a conforming live claude in the foreground, `restored`
+        # puts Herdr's native claude --resume shape there without Firstmate's
+        # permission flag, `duplicate` reports two Claude processes, `shell` a
+        # bare zsh whose pid is the test script itself (a real, long-lived
+        # process with no harness descendant, so the adapter's real
+        # process-table walk finds it), and anything else answers nothing.
         pane=""; args=("$@"); for ((i=0; i<${#args[@]}; i++)); do [ "${args[$i]}" = --pane ] && pane=${args[$((i+1))]:-}; done
         case "${FM_FAKE_HERDR_PROCESS:-agent}" in
-          agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude"}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          restored) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          duplicate) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]},{"pid":424243,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           shell) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":%s,"foreground_processes":[{"pid":%s,"name":"zsh","argv0":"zsh","argv":["-zsh"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
         esac
         exit 0 ;;
@@ -1439,6 +1443,27 @@ test_no_run_grok_uses_isolated_fallback() {
   pass "grok still reads working through its isolated rendered-tail fallback"
 }
 
+test_no_run_herdr_restored_claude_without_bypass_is_not_alive() {
+  command -v jq >/dev/null 2>&1 || { pass "Herdr restored-Claude posture test skipped without jq"; return; }
+  reset_fakes
+  local d; d=$(new_case herdr-restored-claude)
+  make_repo_on_branch "$d/wt" fm/feat-herdr-restored
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-herdr-restored.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_HERDR_AGENT_STATUS=idle
+  FM_FAKE_HERDR_PROCESS=restored
+  local out; out=$(run_crew_state "$d" feat-herdr-restored)
+  assert_contains "$out" "state: unknown" "a restored Claude without bypass must not read alive"
+  assert_contains "$out" "lacks the selected unattended permission flag" \
+    "the public state reader must name the permission drift"
+  assert_contains "$out" "relaunch in place" \
+    "the public state reader must preserve the endpoint and local copy through relaunch"
+  pass "fm-crew-state detects a native claude --resume that lost bypass permissions"
+}
+
 test_no_run_herdr_unknown_uses_backend_capture() {
   command -v jq >/dev/null 2>&1 || { pass "herdr pane fallback skipped without jq"; return; }
   reset_fakes
@@ -2527,6 +2552,7 @@ test_other_branch_run_ignored
 test_no_run_busy_pane
 test_no_run_footer_text_alone_is_not_working
 test_no_run_grok_uses_isolated_fallback
+test_no_run_herdr_restored_claude_without_bypass_is_not_alive
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
 test_no_run_herdr_alive_with_failed_read_stays_live

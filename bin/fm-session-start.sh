@@ -844,11 +844,27 @@ for meta in "$STATE"/*.meta; do
   target=$(fm_backend_target_of_meta "$meta")
   if [ -n "$window" ]; then
     backend=$(fm_backend_of_meta "$meta")
-    if fm_backend_target_exists "$backend" "${target:-$window}" "fm-$id"; then
-      printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
-    else
-      printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window"
-    fi
+    harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
+    case "$backend:$harness" in
+      herdr:claude*)
+        endpoint_state=$(fm_backend_agent_state_for_meta "$meta" "$FM_BACKEND_CONFIG_DIR" 2>/dev/null || printf 'unreadable')
+        ;;
+      *)
+        if fm_backend_target_exists "$backend" "${target:-$window}" "fm-$id"; then
+          endpoint_state=alive
+        else
+          endpoint_state=missing
+        fi
+        ;;
+    esac
+    case "$endpoint_state" in
+      alive) printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window" ;;
+      dead|missing) printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window" ;;
+      permission-drift)
+        printf 'endpoint: permission-drift (Claude process lacks the selected unattended permission flag; relaunch in place; backend=%s window=%s)\n' "$backend" "$window"
+        ;;
+      *) printf 'endpoint: unknown (backend=%s window=%s state=%s)\n' "$backend" "$window" "$endpoint_state" ;;
+    esac
   else
     printf 'endpoint: unknown (no window recorded)\n'
   fi

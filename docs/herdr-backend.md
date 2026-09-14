@@ -278,8 +278,9 @@ No Herdr-specific copy of that protocol exists.
 
 ## Restart and liveness behavior
 
-Stopping and restarting a named Herdr server preserves workspace, tab, pane, and label ids, but the underlying harness processes and live agent registrations do not survive.
-A restored same-labeled tab with a missing pane or no registered agent is a husk.
+Stopping and restarting a named Herdr server preserves workspace, tab, pane, and label ids.
+When native agent restoration is enabled, current Herdr releases can also resume a registered official agent, while a disabled or unavailable native restore still leaves a missing-pane or no-agent husk.
+Herdr's Claude resume command is synthesized as `claude --resume <session-id>` rather than reconstructed from Firstmate's original launch, so process existence alone does not prove the restored worker retained its unattended permission flag.
 Create replaces only a confidently dead or no-agent husk, creates the replacement before closing the old tab, and refuses live or unknown states.
 This prevents closing the workspace's last tab before a replacement exists.
 
@@ -292,14 +293,18 @@ The response shape the adapter parses (`result.type` of `pane_process_info`, `pr
 A server response below 0.9.0 has not been measured for this parse.
 An unreadable or unparseable process view reads `unknown`, which refuses lifecycle verbs and recovery rather than trusting the registration.
 
-The generic Herdr agent-liveness probe reuses that pane classifier, then applies one recovery-only exception.
+The generic Herdr agent-liveness probe reuses that pane classifier, then applies two recovery-only refinements.
 A structurally gone pane or a pane read from a session positively reported as having no running server becomes `missing`, a restored agent-less shell and a stale registration over a shell-only pane both become `dead`, a registered agent with a live process becomes `alive`, and every other unexpected read becomes `unreadable`.
-Neither the stopped-server exception nor the stale-registration verdict widens husk detection or any close authority; those paths still refuse an unreadable pane, and a `stale-agent` pane is reused by recovery, never closed as a husk, because the shell it holds may be a nested worktree shell.
+For a task recorded on Claude, one exact foreground Claude argv is also checked against the current home's selected `bypass` or `auto` permission mode.
+A missing selected flag becomes `permission-drift`, multiple foreground Claude processes become `ambiguous`, and a non-Claude foreground tool preserves the generic live verdict because a healthy agent may temporarily hand it the pty.
+Exact argv boundaries are required because a flattened command line can contain permission-flag text inside the worker prompt.
+Neither the stopped-server exception, stale-registration verdict, nor permission check widens husk detection or any close authority; those paths still refuse an unreadable pane, and a `stale-agent` pane is reused by recovery, never closed as a husk, because the shell it holds may be a nested worktree shell.
+A process with permission drift remains alive in the compatibility view so no fresh spawn can join it; only `bin/fm-control.sh relaunch` may stop the one attributed process and reuse its exact endpoint and worktree.
 Native registration still identifies Pi by name where tmux would see a generic interpreter; the process-level proof only decides whether that registration is backed by a running process.
 `tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh` pins the live-Pi versus leftover-shell distinction; [`verification/runtime-backends.md`](verification/runtime-backends.md#agent-lifecycle-control) owns the versioned evidence.
 
-The session-start sweep uses this probe.
-Mid-session secondmate agent-process liveness is not implemented because idle secondmates are deliberately exempt from stale-pane escalation and need a separate periodic identity signal.
+The session-start digest uses this policy-aware probe for Claude endpoints, and the session-start secondmate sweep automatically relaunches an attributed drifted Claude process.
+The watcher runs the same narrow check before its idle-secondmate exemption, so runtime restoration is surfaced for ordinary workers and secondmates without treating every quiet mate as stale.
 
 ## Push events and polling fallback
 
@@ -349,13 +354,16 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 - Mutable labels can collide; they are never placement or destructive authority.
 - A Firstmate outside Herdr cannot resolve a launcher workspace, so a colliding home label refuses new spawns until the collision is cleared.
 - Ghost and placeholder recognition uses ANSI de-emphasis when available; an unstyled glyph row carrying trailing non-idle text fails safely to `unknown`.
-- Mid-session secondmate agent-process liveness is not implemented.
+- Mid-session process-disappearance detection remains on the ordinary supervision path; the narrow Claude permission-posture check runs every watcher poll.
 - Only tmux and Herdr can host the away-mode supervisor terminal.
 
 ## Regression entry points
 
 ```sh
 tests/fm-backend-herdr.test.sh
+tests/fm-crew-state.test.sh
+tests/fm-control-relaunch.test.sh
+tests/fm-claude-permission-restore-live-e2e.test.sh
 tests/fm-composer-lib.test.sh
 tests/fm-herdr-submit-confirm-live-e2e.test.sh
 tests/fm-backend-herdr-smoke.test.sh

@@ -339,6 +339,7 @@ family_for_basename() {
       ;;
     fm-afk-pi-herdr-return-e2e.test.sh|\
     fm-bearings-board-lavish-live-e2e.test.sh|\
+    fm-claude-permission-restore-live-e2e.test.sh|\
     fm-claude-stop-autoarm-live-e2e.test.sh|\
     fm-cmux-claude-composer-live-e2e.test.sh|\
     fm-composer-matrix-live-e2e.test.sh|\
@@ -1358,6 +1359,17 @@ families_for_changed_path() {
     bin/fm-backend.sh|bin/fm-backend-hometag-lib.sh)
       printf '%s\n' backend-dispatch
       printf '%s\n' real-herdr-gated
+      ;;
+    bin/fm-claude-permission-lib.sh)
+      # Permission selection feeds launch plus policy-aware Herdr recovery at
+      # startup, in the watcher, through local control, and across secondmates.
+      printf '%s\n' backend-dispatch
+      printf '%s\n' real-herdr-gated
+      printf '%s\n' session-bootstrap
+      printf '%s\n' secondmate
+      printf '%s\n' watcher-wake-lock
+      printf '%s\n' live-harness-optin
+      printf '%s\n' pure-contract-unit
       ;;
     bin/fm-agent-process-lib.sh)
       # The shared harness-process classifier feeds both the tmux and Herdr

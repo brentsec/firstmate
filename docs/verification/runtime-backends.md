@@ -747,7 +747,7 @@ The CLI matrix was checked directly:
 | Keys | `herdr pane send-keys <pane> enter|escape|ctrl+c --session <name>` | Enter and Escape worked; Ctrl-C interrupted foreground work. |
 | Capture | `herdr pane read <pane> --source recent --lines N` | Small N could return empty below viewport height; a 200-line request plus local trim was stable. |
 | Native state | `herdr agent get <pane>` | Working and done transitions were visible on some harnesses; live Claude Code 2.1.236 on Herdr 0.8.0 kept `agent_status=idle` for an entire landed turn, including a multi-second tool call, so submit confirmation falls through to the shared composer verdict. Native `busy` remains positive activity evidence, while native `idle` cannot close a turn and the adapter's semantic lifecycle decides worker state. |
-| Restart | guarded named-session stop then start | Workspace, tab, pane, and labels persisted; the agent process and registration did not. |
+| Restart | guarded named-session stop then start | Workspace, tab, pane, and labels persisted on every measured release; 0.7.x did not restore the agent, while 0.8.2 can natively resume an official agent with a newly synthesized command as measured under "Claude permission posture after native restoration" below. |
 | Close | `herdr pane close <pane> --session <name>` | The exact one-pane task tab closed; closing a final tab could remove the workspace. |
 
 All destructive verification used `bin/fm-herdr-lab.sh` with a non-default `fm-lab-` name and a byte-identical default-session tripwire.
@@ -1207,6 +1207,40 @@ ok - real herdr: an agent that does not stop fails closed instead of being repor
 
 The registry read through `herdr pane report-agent` is the same source `fm_backend_herdr_agent_state` classifies, and since 2026-09-10 that registration counts as an agent only while `pane process-info` shows a harness process behind it, so the guard backs the registration with a real process named like a harness (a symlink to `sleep`) and then stops that process, with no real harness launched.
 That command is the guard that refreshes this record; run it after every Herdr upgrade rather than trusting the version above.
+
+### Claude permission posture after native restoration
+
+Measured 2026-09-13 on Linux with Herdr 0.8.2 protocol 20 and Claude Code 2.1.270 in a generated non-default named lab.
+The opt-in guard uses the public spawn, state, and control interfaces and performs every Herdr operation through `bin/fm-herdr-lab.sh`:
+
+```sh
+FM_CLAUDE_PERMISSION_RESTORE_E2E=1 \
+HERDR_LAB_HELPER=bin/fm-herdr-lab.sh \
+  tests/fm-claude-permission-restore-live-e2e.test.sh
+```
+
+Observed bounded output:
+
+```text
+ok - initial Firstmate Claude spawn is visibly in bypass mode
+ok - Herdr native restore reproduced claude --resume in visible manual mode
+ok - adding only bypass to the same claude --resume restores visible bypass mode
+ok - public state reader detects the restored permission drift
+ok - public recovery preserves the endpoint and isolated copy and restores visible bypass mode
+# all real Claude permission-restore E2E assertions passed
+```
+
+The initial launch's exact process argv contained `--dangerously-skip-permissions`, and Claude's footer displayed `bypass permissions on`.
+After the guarded server stop and restart, Herdr restored the same pane as `claude --resume <session-id>` with no selected permission flag, and Claude's footer displayed `manual mode`.
+No input or permission toggle was sent between those observations.
+Stopping that restored process and adding only `--dangerously-skip-permissions` to the same resume command returned the footer to bypass mode, so Claude session persistence itself is not enough to cause the drift.
+The public state reader then detected a second native restoration instead of trusting process existence, and the public relaunch reused the exact recorded endpoint and isolated copy while returning the worker to visible bypass mode without human input.
+The portable regressions require exact argv arrays, reject flattened prompt text as flag evidence, and refuse multiple foreground Claude candidates rather than stopping either one.
+
+Every Firstmate-owned initial, same-task, local recovery, and remote secondmate relaunch still reaches the same launch template in `bin/fm-spawn.sh`; the restoration-specific reconciliation changes only the Herdr Claude path.
+Tmux performs no native agent restoration through Firstmate and remains covered by the same launch-template and relaunch regressions.
+Zellij, Orca, and cmux still have no recovery-grade relaunch classifier, so their existing recovery refusals are unchanged rather than being widened by this result.
+The change grants only the configured worker command-permission posture; merge, destructive, irreversible, security-sensitive, and ask-user authority remain separate lifecycle decisions.
 
 For Pi on Herdr 0.9.0, `herdr agent get` reflects whether the agent process remains live; its registration does not persist merely because the pane and parent shell do.
 A Pi launched as a child of the pane shell (not via `exec`) that then `/quit`s or is SIGKILL'd leaves the pane and shell in place, and `agent get` returns `agent_not_found`.

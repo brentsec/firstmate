@@ -14,6 +14,20 @@ Busy hooks verified 2026-07-28 on Claude Code 2.1.220.
 | Effort | `--effort <low\|medium\|high\|xhigh\|max>`, verified on 2.1.196. |
 | Permissions | `--dangerously-skip-permissions` by default, or `--permission-mode auto` when `config/claude-permission-mode` is `auto`; the `auto` shape verified on 2.1.269, and `../../../../../docs/configuration.md` "Claude permission mode" owns the file. |
 
+## Runtime restoration
+
+Never trust a runtime-restored Claude process merely because Claude and its provider registration are live.
+Herdr's native agent restoration synthesizes `claude --resume <session-id>` and does not replay Firstmate's original permission flag, so a worker that initially displayed `bypass permissions on` can otherwise return in `manual mode` after a session or machine restart.
+The policy-aware Herdr recovery state checks the exact foreground argv against the current home's selected permission mode.
+One attributed Claude process missing that flag reads `permission-drift` and must be replaced through `FM_HOME=<active-home> bin/fm-control.sh <task-id> relaunch --note '<progress>'`, which preserves the endpoint, local copy, and unfinished work while `bin/fm-spawn.sh` reapplies the flag.
+A secondmate needs no note and its startup recovery uses that same control plane automatically.
+Multiple foreground Claude processes are ambiguous and refuse recovery; reconcile ownership without typing or launching anything.
+A temporary non-Claude foreground tool is not drift, and a flattened command line or pane footer is not flag evidence because the worker prompt may contain the same text.
+
+This permission posture controls worker command approval only.
+It does not authorize merges or destructive, irreversible, security-sensitive, or ask-user decisions.
+Those remain under the ordinary Firstmate authority contracts.
+
 ## Workspace trust
 
 Claude gates a folder it has never seen behind an interactive workspace-trust dialog (titled "Quick safety check: Is this a project you created or one you trust?"), so every fresh task worktree would hit it, and so would every secondmate home no operator has opened by hand.

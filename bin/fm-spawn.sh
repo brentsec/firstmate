@@ -256,11 +256,16 @@
 #   `--dangerously-skip-permissions`; `auto` launches with `--permission-mode
 #   auto` instead, Claude Code's classifier-reviewed mode, for a captain who
 #   refuses to run workers in bypass mode. Every other part of the claude launch
-#   is unchanged. The token is the file's whitespace-trimmed content; any other
-#   value, or an unreadable file, refuses the spawn before any endpoint,
-#   worktree, or record exists and names the accepted values. The file is read
-#   on every spawn and relaunch, so a change reaches the next launch without a
-#   restart, and it is inherited into secondmate homes (bin/fm-config-inherit-lib.sh).
+#   is unchanged. bin/fm-claude-permission-lib.sh owns parsing and the exact
+#   flag mapping. Any other value, or an unreadable file, refuses the spawn
+#   before any endpoint, worktree, or record exists and names the accepted
+#   values. The file is read on every spawn and relaunch, so a change reaches
+#   the next launch without a restart, and it is inherited into secondmate
+#   homes (bin/fm-config-inherit-lib.sh). A runtime-native Claude restore is not
+#   a Firstmate relaunch and may omit the selected flag; the recovery-grade
+#   backend state detects that invocation drift so the control plane can safely
+#   replace it in the same endpoint and worktree instead of trusting it as a
+#   valid worker.
 #   Launch templates live in launch_template() below; placeholders replaced before launch:
 #     __BRIEF__    absolute path to data/<task-id>/brief.md
 #     __CLAUDEPERMFLAG__ the claude permission flag selected by config/claude-permission-mode
@@ -413,6 +418,8 @@ PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 # shellcheck source=bin/fm-config-inherit-lib.sh
 . "$SCRIPT_DIR/fm-config-inherit-lib.sh"
+# shellcheck source=bin/fm-claude-permission-lib.sh
+. "$SCRIPT_DIR/fm-claude-permission-lib.sh"
 if ! LAUNCH_ENV_ENABLED=$(fm_config_source_present "$CONFIG/launch-env-allowlist"); then
   exit 1
 fi
@@ -434,28 +441,8 @@ fi
 # config/claude-permission-mode (header above): resolved once per spawn or
 # relaunch, before any mutation, so a malformed file refuses instead of
 # launching a worker on a permission posture the captain did not choose.
-if ! CLAUDE_PERM_PRESENT=$(fm_config_source_present "$CONFIG/claude-permission-mode"); then
-  exit 1
-fi
-CLAUDE_PERMISSION_MODE=bypass
-if [ "$CLAUDE_PERM_PRESENT" = 1 ]; then
-  if [ ! -f "$CONFIG/claude-permission-mode" ] || [ ! -r "$CONFIG/claude-permission-mode" ]; then
-    echo "error: config/claude-permission-mode must be a readable regular file holding one of: bypass, auto" >&2
-    exit 1
-  fi
-  CLAUDE_PERMISSION_MODE=$(tr -d '[:space:]' < "$CONFIG/claude-permission-mode" || true)
-  case "$CLAUDE_PERMISSION_MODE" in
-    bypass|auto) ;;
-    *)
-      echo "error: config/claude-permission-mode holds '$CLAUDE_PERMISSION_MODE'; accepted values are: bypass (--dangerously-skip-permissions, the default when the file is absent), auto (--permission-mode auto)" >&2
-      exit 1
-      ;;
-  esac
-fi
-case "$CLAUDE_PERMISSION_MODE" in
-  auto) CLAUDE_PERM_FLAG='--permission-mode auto' ;;
-  *) CLAUDE_PERM_FLAG='--dangerously-skip-permissions' ;;
-esac
+CLAUDE_PERMISSION_MODE=$(fm_claude_permission_mode "$CONFIG") || exit 1
+CLAUDE_PERM_FLAG=$(fm_claude_permission_flag "$CLAUDE_PERMISSION_MODE") || exit 1
 SUB_HOME_MARKER=".fm-secondmate-home"
 if [ -e "$STATE" ] || [ -L "$STATE" ]; then
   fm_backlog_directory_present "$STATE" "state directory" || {

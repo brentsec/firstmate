@@ -878,39 +878,80 @@ fm_backend_target_exists() {  # <backend> <target> [expected-label]
 # fm_backend_agent_state: the single recovery-grade agent/endpoint state
 # contract. It is deliberately richer than fm_backend_target_exists's cheap
 # pane-presence read and prints exactly one of:
-#   alive      - a verified harness agent is running.
-#   dead       - the endpoint exists but confidently has no agent.
-#   missing    - the recorded endpoint is authoritatively absent.
-#   ambiguous  - the endpoint exists but its process cannot be attributed.
-#   unreadable - a target or inventory read failed or contradicted itself.
-#   unverified - this backend has no recovery classifier.
-# Only `dead` and `missing` license recovery. Every `alive` is proven at
-# process level through the shared classifier in bin/fm-agent-process-lib.sh,
-# never from a registration or a rendered title alone. The tmux adapter
-# requires a successful session inventory and returns `missing` only when it
-# omits the exact window; the Herdr adapter reuses its strict husk classifier -
-# which verifies a registered agent against `pane process-info` and the real
-# process table, so a registration Herdr kept over a shell-only pane reads
-# `dead` here (issue #4115) - then maps a positively stopped session server to
-# `missing` only in this recovery-grade view. Zellij remains unverified because
-# its secondmate ghost-tab and agent-process recovery path has not been
-# empirically validated. Orca and cmux do not support secondmate spawns.
-fm_backend_agent_state() {  # <backend> <target>
-  local backend=$1 target=$2
+#   alive            - a verified harness agent is running in its required posture.
+#   permission-drift - one attributed Claude process is running without this
+#                      home's selected unattended permission flag.
+#   dead             - the endpoint exists but confidently has no agent.
+#   missing          - the recorded endpoint is authoritatively absent.
+#   ambiguous        - the endpoint exists but its process cannot be attributed,
+#                      including multiple foreground Claude processes.
+#   unreadable       - a target or inventory read failed or contradicted itself.
+#   unverified       - this backend has no recovery classifier.
+# Only `dead` and `missing` license a fresh spawn. `permission-drift` licenses
+# only the ordinary control-plane relaunch, which first proves and stops that
+# exact live Claude process before reusing its endpoint and worktree. Every
+# `alive` is proven at process level through the shared classifier in
+# bin/fm-agent-process-lib.sh, never from a registration or a rendered title
+# alone. The optional expected-harness and Claude-mode arguments add exact
+# invocation conformance on backends that expose argv boundaries; callers that
+# have no task metadata retain the historical process-liveness view.
+#
+# The tmux adapter requires a successful session inventory and returns
+# `missing` only when it omits the exact window. The Herdr adapter reuses its
+# strict husk classifier, which verifies a registered agent against `pane
+# process-info` and the real process table, so a registration Herdr kept over a
+# shell-only pane reads `dead` here (issue #4115). Herdr additionally detects a
+# runtime-native `claude --resume` that omitted Firstmate's selected permission
+# flag, then maps a positively stopped session server to `missing` only in this
+# recovery-grade view. Zellij remains unverified because its secondmate
+# ghost-tab and agent-process recovery path has not been empirically validated.
+# Orca and cmux do not support secondmate spawns.
+fm_backend_agent_state() {  # <backend> <target> [expected-harness] [claude-mode]
+  local backend=$1 target=$2 expected_harness=${3:-} claude_mode=${4:-}
   fm_backend_source "$backend" || { printf 'unverified'; return 0; }
   case "$backend" in
     tmux) fm_backend_tmux_agent_state "$target" ;;
-    herdr) fm_backend_herdr_agent_state "$target" ;;
+    herdr) fm_backend_herdr_agent_state "$target" "$expected_harness" "$claude_mode" ;;
     *) printf 'unverified' ;;
   esac
 }
 
-# Backward-compatible three-state view for existing callers. An
-# authoritatively missing endpoint is confidently not a live agent, while every
-# ambiguous, unreadable, or unverified result stays unknown.
+# Resolve the policy-aware recovery state for one exact task record. The
+# current home config is re-read on every call, so a restored process is judged
+# against the permission posture the next Firstmate launch would use. A malformed
+# record or permission config is unreadable, never permission to launch.
+fm_backend_agent_state_for_meta() {  # <meta-file> [config-dir]
+  local meta=$1 config_dir=${2:-$FM_BACKEND_CONFIG_DIR} backend target harness mode
+  [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'unreadable'; return 0; }
+  backend=$(fm_backend_of_meta "$meta")
+  target=$(fm_backend_target_of_meta "$meta")
+  harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
+  [ -n "$target" ] || { printf 'unreadable'; return 0; }
+  case "$harness" in
+    claude*)
+      # Load the policy owner only for task-aware Claude inspection. Generic
+      # backend liveness and cleanup keep their historical dependency surface.
+      # shellcheck source=bin/fm-claude-permission-lib.sh
+      . "$FM_BACKEND_LIB_DIR/fm-claude-permission-lib.sh"
+      mode=$(fm_claude_permission_mode "$config_dir") || {
+        printf 'unreadable'
+        return 0
+      }
+      fm_backend_agent_state "$backend" "$target" claude "$mode"
+      ;;
+    *) fm_backend_agent_state "$backend" "$target" ;;
+  esac
+}
+
+# Backward-compatible three-state view for existing callers. A process with
+# permission drift is still alive for duplicate prevention; it is not a valid
+# worker posture, and policy-aware callers use the detailed state above to
+# replace it safely. An authoritatively missing endpoint is confidently not a
+# live agent, while every ambiguous, unreadable, or unverified result stays
+# unknown.
 fm_backend_agent_alive() {  # <backend> <target>
   case "$(fm_backend_agent_state "$1" "$2")" in
-    alive) printf 'alive' ;;
+    alive|permission-drift) printf 'alive' ;;
     dead|missing) printf 'dead' ;;
     *) printf 'unknown' ;;
   esac

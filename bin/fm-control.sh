@@ -82,8 +82,11 @@
 #     classifier (tmux, herdr), because without one the "the agent stopped"
 #     postcondition cannot be proven. zellij, orca, and cmux are refused rather
 #     than reported as successful blind.
-#   - An ambiguous or unreadable endpoint state refuses; only a positively
-#     classified state acts.
+#   - An ambiguous or unreadable endpoint state refuses. A policy-aware
+#     `permission-drift` state is one positively attributed live Claude process
+#     whose runtime-restored command omitted this home's selected unattended
+#     flag; `relaunch` may stop and replace only that exact process through the
+#     same transaction as any ordinary live agent.
 #   - A composer that visibly holds pending text refuses before an exit command
 #     is typed, so existing text is preserved instead of being concatenated.
 #
@@ -318,7 +321,7 @@ fm_backend_validate "$BACKEND" || exit 1
 # --- shared helpers ---------------------------------------------------------
 
 agent_state() {
-  fm_backend_agent_state "$BACKEND" "$T"
+  fm_backend_agent_state_for_meta "$META" "$FM_BACKEND_CONFIG_DIR"
 }
 
 busy_verdict() {
@@ -426,8 +429,10 @@ verify_interrupt_running() {
     # An interrupt cancels a turn; it must never have stopped the agent. This
     # is the postcondition that separates a landed interrupt from an accident.
     after=$(agent_state)
-    [ "$after" = alive ] \
-      || die "task $ID's agent is '$after' after its interrupt key; an interrupt must leave the agent running"
+    case "$after" in
+      alive|permission-drift) ;;
+      *) die "task $ID's agent is '$after' after its interrupt key; an interrupt must leave the agent running" ;;
+    esac
     proof=agent-alive
   fi
   printf '%s' "$proof"
@@ -457,7 +462,7 @@ do_exit() {
       printf 'already-stopped'
       return 0
       ;;
-    alive) ;;
+    alive|permission-drift) ;;
     missing) die "task $ID's recorded endpoint is gone, so there is no agent to stop; reconcile the task before any further control action" ;;
     *) die "task $ID's endpoint reads '$state' rather than a positively classified state; refusing to send a lifecycle command into an unattributed endpoint" ;;
   esac
@@ -472,7 +477,7 @@ do_exit() {
           printf 'stopped'
           return 0
           ;;
-        alive) interrupt_result="delivered verified=agent-alive cancel=$cancel" ;;
+        alive|permission-drift) interrupt_result="delivered verified=agent-alive cancel=$cancel" ;;
         missing) die "task $ID's recorded endpoint disappeared after interrupt delivery, so exit cannot prove whether the agent stopped" ;;
         *) die "task $ID's endpoint reads '$state' after interrupt delivery rather than a positively classified state; exit cannot prove whether the agent stopped" ;;
       esac
@@ -584,7 +589,7 @@ relaunch_rollback() {
     stopping)
       state=$(agent_state 2>/dev/null || printf unknown)
       case "$state" in
-        alive)
+        alive|permission-drift)
           if [ -n "$RELAUNCH_BRIEF" ] && [ -f "$BRIEF_PRIOR" ]; then
             cp -p "$BRIEF_PRIOR" "$RELAUNCH_BRIEF" 2>/dev/null || true
           fi
@@ -873,7 +878,7 @@ case "$VERB" in
   interrupt)
     state=$(agent_state)
     case "$state" in
-      alive) ;;
+      alive|permission-drift) ;;
       unverified)
         # No recovery-grade classifier on this backend. Interrupt is
         # non-destructive and its endpoint-existence postcondition is still

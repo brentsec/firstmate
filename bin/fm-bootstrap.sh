@@ -47,7 +47,11 @@
 #          recovery-grade state owned by bin/fm-backend.sh's
 #          fm_backend_agent_state: skipped distinguishes an existing ambiguous
 #          process, an unreadable target, and an unverified backend; respawn
-#          failed names whether the endpoint was missing or agent-less.
+#          failed names whether the endpoint was missing or agent-less. A
+#          runtime-restored Claude process missing this home's selected
+#          unattended permission flag is replaced transactionally in its same
+#          endpoint and home through fm-control rather than trusted as alive or
+#          killed as agent-less.
 #          Already-live and successfully relaunched secondmates are silent
 #          unless FM_BOOTSTRAP_VERBOSE_FACTS=1 requests BOOTSTRAP_INFO facts.
 #          A TANGLE line means the firstmate primary checkout (FM_ROOT) is stranded
@@ -685,8 +689,10 @@ secondmate_liveness_sweep() {
   # lacked.
   # A meta with no window remains owned by secondmate-provisioning recovery.
   # Secondmate homes never contain kind=secondmate meta, so this is naturally a
-  # primary-only no-op there. Mid-session liveness remains explicitly out of
-  # scope and requires a separate periodic signal.
+  # primary-only no-op there. Mid-session process disappearance still uses the
+  # ordinary supervision path; Claude permission drift is the narrow exception
+  # detected on every watcher poll because an idle mate otherwise has no stale
+  # cadence.
   [ -d "$STATE" ] || return 0
   local meta id remote_host label __fm_timing_stamp parallel=0
   SECONDMATE_RESPAWNED_IDS=""
@@ -726,6 +732,7 @@ secondmate_liveness_one_timed() {  # <meta> <id> <label>
 secondmate_liveness_one() {  # <meta> <id>
   local meta=$1 id=$2
   local window harness backend target agent_state out cause remote_host remote_rc readiness_reason route_out remote_backend
+  local remote_harness remote_model remote_effort
   window=$(fm_meta_get "$meta" window)
   [ -n "$window" ] || return 0
   harness=$(fm_meta_get "$meta" harness)
@@ -790,6 +797,21 @@ secondmate_liveness_one() {  # <meta> <id>
           echo "SECONDMATE_LIVENESS: secondmate $id: respawn failed after $cause: $(first_line "$out")"
         fi
         ;;
+      permission-drift)
+        cause="a runtime-restored Claude process omitted the selected unattended permission flag"
+        remote_harness=$("$SCRIPT_DIR/fm-harness.sh" secondmate 2>/dev/null || true)
+        [ -n "$remote_harness" ] || remote_harness=$harness
+        remote_model=$("$SCRIPT_DIR/fm-harness.sh" secondmate-model 2>/dev/null || true)
+        remote_effort=$("$SCRIPT_DIR/fm-harness.sh" secondmate-effort 2>/dev/null || true)
+        if out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-on.sh" "$id" \
+          fm-remote-secondmate-control.sh relaunch "$id" "$remote_harness" \
+          "${remote_model:-default}" "${remote_effort:-default}" < /dev/null 2>&1); then
+          secondmate_note_respawned "$id"
+          report_relaunch "$id" "$cause" "host=$remote_host"
+        else
+          echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
+        fi
+        ;;
       ambiguous|unreadable|unverified)
         echo "SECONDMATE_LIVENESS: secondmate $id: skipped: remote endpoint state is $agent_state on $remote_host"
         ;;
@@ -800,7 +822,7 @@ secondmate_liveness_one() {  # <meta> <id>
   backend=$(fm_backend_of_meta "$meta")
   target=$(fm_backend_target_of_meta "$meta")
   [ -n "$target" ] || target="$window"
-  agent_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || agent_state=unreadable
+  agent_state=$(fm_backend_agent_state_for_meta "$meta" "$FM_BACKEND_CONFIG_DIR" 2>/dev/null) || agent_state=unreadable
   case "$harness" in
     claude|codex|opencode|pi|pi-signed|grok|kimi|omp) ;;
     *)
@@ -825,6 +847,16 @@ secondmate_liveness_one() {  # <meta> <id>
         report_relaunch "$id" "$cause" "backend=$backend"
       else
         echo "SECONDMATE_LIVENESS: secondmate $id: respawn failed after $cause: $(first_line "$out")"
+      fi
+      ;;
+    permission-drift)
+      cause="a runtime-restored Claude process omitted the selected unattended permission flag"
+      if out=$(FM_SPAWN_NO_GUARD=1 FM_HOME="$FM_HOME" \
+        "$FM_ROOT/bin/fm-control.sh" "$id" relaunch 2>&1); then
+        secondmate_note_respawned "$id"
+        report_relaunch "$id" "$cause" "backend=$backend"
+      else
+        echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
       fi
       ;;
     ambiguous)

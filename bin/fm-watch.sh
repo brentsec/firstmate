@@ -388,7 +388,7 @@ window_label() {
 # The ONE derivation of a window's per-window marker key: `:`, `/` and `.` become
 # `_` so a window name is usable as a filename suffix. Every per-window file the
 # watcher keeps is named by it (.hash-, .count-, .stale-, .stale-since-,
-# .wedge-escalations-, .paused-*, .writing-*), and live homes hold those markers on
+# .claude-permission-*, .wedge-escalations-, .paused-*, .writing-*), and live homes hold those markers on
 # disk under the current format, so the format lives here alone: a second copy is
 # how a future change to it silently orphans a window's markers instead of clearing
 # them. The helpers below take the derived key rather than re-deriving it, so one
@@ -397,6 +397,54 @@ window_key() {  # <window>
   local key=${1//:/_}
   key=${key//\//_}
   printf '%s' "${key//./_}"
+}
+
+# Detect the one restoration path that process liveness alone cannot validate:
+# Herdr can synthesize `claude --resume` after a session or machine restart
+# without replaying Firstmate's unattended permission flag. Run before the
+# ordinary secondmate idle exemption, so an idle restored mate cannot mask the
+# drift indefinitely. One exact process is routed through ordinary stuck-worker
+# recovery; multiple foreground Claude processes are reported as ambiguous and
+# never acted on automatically. A generation-and-mode signature suppresses only
+# repeats of the same finding, and is cleared when the endpoint returns to a
+# valid or agent-free state.
+claude_permission_posture_check() {  # <window> <task> <marker-key>
+  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen state marker signature reason
+  [ -n "$task" ] || return 0
+  meta="$STATE/$task.meta"
+  [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
+  backend=$(fm_backend_of_meta "$meta")
+  harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
+  case "$backend:$harness" in herdr:claude*) ;; *) return 0 ;; esac
+  if ! command -v fm_claude_permission_mode >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-claude-permission-lib.sh
+    . "$SCRIPT_DIR/fm-claude-permission-lib.sh"
+  fi
+  mode=$(fm_claude_permission_mode "$FM_BACKEND_CONFIG_DIR" 2>/dev/null) || return 0
+  spawn_gen=$(fm_backend_meta_exact_value "$meta" spawn_gen 2>/dev/null || true)
+  state=$(fm_backend_agent_state "$backend" "$w" claude "$mode" 2>/dev/null || printf 'unreadable')
+  marker="$STATE/.claude-permission-$key"
+  signature="${spawn_gen:-legacy}:$mode:$state"
+  case "$state" in
+    permission-drift)
+      reason="stale: $w (runtime-restored Claude process lacks the selected unattended $mode permission flag; relaunch the worker safely in its recorded endpoint and local copy)"
+      ;;
+    ambiguous)
+      reason="stale: $w (multiple foreground Claude processes make runtime restoration ambiguous; refuse automatic recovery and reconcile ownership before any lifecycle action)"
+      ;;
+    alive|dead|missing)
+      rm -f "$marker"
+      return 0
+      ;;
+    *) return 0 ;;
+  esac
+  [ "$(cat "$marker" 2>/dev/null || true)" != "$signature" ] || return 0
+  fm_wake_append stale "$w" "$reason" || exit 1
+  printf '%s' "$signature" > "$marker" || {
+    echo "error: Claude permission finding was queued for $task but its dedupe marker could not be written" >&2
+    exit 1
+  }
+  wake "$reason"
 }
 
 inbox_steer_escalate_unavailable() {  # <window> <task> <record>
@@ -2230,6 +2278,7 @@ EOF
     # exemption below, because a mate's steers land in an inbox too.
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
+    claude_permission_posture_check "$w" "$task" "$key"
     last=$(last_status_line "$STATE/$task.status")
     if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
       clear_pause_tracking "$key"
