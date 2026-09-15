@@ -41,7 +41,10 @@
 # invocations in the core bin/ and bin/backends/ scripts so every configured
 # backlog backend follows the same tasks-axi lifecycle path.
 #
-# Canonical lint defaults to two bounded workers over two stable logical shards.
+# Canonical lint defaults to two bounded workers over two stable logical shards,
+# and every worker runs one ShellCheck process per root, so each worker's peak
+# memory is that of its largest single source graph and is released before the
+# next root (docs/verification/lint-ci-memory.md records the measured peaks).
 # Each shard writes separate diagnostics, and the parent replays those outputs in
 # deterministic shard and root order after every worker finishes. FM_LINT_JOBS=1
 # runs the same shards serially with byte-identical diagnostics and exit selection.
@@ -103,23 +106,21 @@ fm_lint_worker() {  # <manifest> <output-dir> <shard-index>
       shellcheck_args+=(--extended-analysis=false)
     fi
     : > "$output.out"
-    if [ "${FM_LINT_INTERNAL_FOLLOW_SOURCES:-1}" -eq 1 ]; then
-      "$FM_LINT_SHELLCHECK" "${shellcheck_args[@]}" -- "${roots[@]}" >> "$output.out" 2>&1 &
+    # One ShellCheck process per root in every mode. A single source-aware
+    # invocation over a whole shard holds one process at the peak of its
+    # heaviest root for the whole shard, so two workers' peaks add up; one
+    # process per root releases that memory between roots and reports the
+    # same diagnostics in the same root order (docs/verification/lint-ci-memory.md).
+    for path in "${roots[@]}"; do
+      invocation_rc=0
+      "$FM_LINT_SHELLCHECK" "${shellcheck_args[@]}" -- "$path" >> "$output.out" 2>&1 &
       FM_LINT_WORKER_SHELLCHECK_PID=$!
-      wait "$FM_LINT_WORKER_SHELLCHECK_PID" || rc=$?
+      wait "$FM_LINT_WORKER_SHELLCHECK_PID" || invocation_rc=$?
       FM_LINT_WORKER_SHELLCHECK_PID=
-    else
-      for path in "${roots[@]}"; do
-        invocation_rc=0
-        "$FM_LINT_SHELLCHECK" "${shellcheck_args[@]}" -- "$path" >> "$output.out" 2>&1 &
-        FM_LINT_WORKER_SHELLCHECK_PID=$!
-        wait "$FM_LINT_WORKER_SHELLCHECK_PID" || invocation_rc=$?
-        FM_LINT_WORKER_SHELLCHECK_PID=
-        if [ "$rc" -eq 0 ] && [ "$invocation_rc" -ne 0 ]; then
-          rc=$invocation_rc
-        fi
-      done
-    fi
+      if [ "$rc" -eq 0 ] && [ "$invocation_rc" -ne 0 ]; then
+        rc=$invocation_rc
+      fi
+    done
     trap - HUP INT TERM
   else
     : > "$output.out"
