@@ -1,0 +1,23 @@
+### upstream ref
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d	refs/heads/main
+
+### local HEAD
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d
+
+### tree of local HEAD
+2f0d099653525273ecf810204ff145880b30a4cf
+
+### base is ancestor of HEAD?
+yes: aa92177 is an ancestor of HEAD
+
+### commits base..HEAD (exactly the upstream commits, no extras)
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d fix(bin): refuse empty text steers in fm-send (#4259)
+8b10b61e3feace8f275c6d0b3e490cdf7ab1f67d fix(bin): read codex 0.154's idle braille starfield rows as composer furniture (#4532)
+b85e28b5f8aad91a553e33d461da9f238bbdac38 fix(bin): make captain holds work on hosts with an older JSON::PP, and stop cleanup dropping accents from a held body (#4471)
+
+### merge commits in range (expect none)
+(end)
+
+### working tree clean / no conflict markers in changed files
+(end status)
+(end conflict scan)

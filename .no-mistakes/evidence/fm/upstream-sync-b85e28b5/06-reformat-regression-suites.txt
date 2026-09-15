@@ -1,0 +1,267 @@
+FM_TEST_BEGIN 2026-09-15T18:08:36Z tests/fm-spawn-batch.test.sh family=backend-dispatch expected_gate_skip=none
+ok - batch dispatch re-execs and reports every id=repo pair
+ok - batch detection: single pair batches, non-pair rejected, single-task and slash-id stay single
+ok - batch dispatch requires the shared ship delivery contract before any pair runs
+ok - scout batch refuses ship delivery flags instead of ignoring them
+ok - projects/ paths are scoped through the firstmate home for single-task spawn
+FM_TEST_END 2026-09-15T18:08:37Z tests/fm-spawn-batch.test.sh exit=0 duration_ms=555 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:08:37Z tests/fm-backlog-handoff.test.sh family=secondmate expected_gate_skip=none
+ok - a routed handoff wakes once and a successful rerun stays idempotent
+ok - a failed receiver wake is loud and retries from an already-present handoff
+ok - a failed advisory doorbell leaves the inbox delivery successful and idempotent
+ok - concurrent reconciliation treats enqueue as delivery despite a failed advisory ring
+tests/fm-backlog-handoff.test.sh: line 263: 619715 Killed                     FM_REAL_TASKS_AXI="$real_tasks" PATH="$fakebin:$PATH" FM_HOME="$home" "$ROOT/bin/fm-backlog-handoff.sh" design crash-item > "$TMP_ROOT/move-crash.out" 2>&1
+ok - a post-move crash preserves wake intent for an idempotent retry
+tests/fm-backlog-handoff.test.sh: line 339: 621019 Killed                     FM_REAL_TASKS_AXI="$real_tasks" PATH="$fakebin:$PATH" FM_HOME="$home" "$ROOT/bin/fm-backlog-handoff.sh" design pre-move-crash > "$TMP_ROOT/pre-move-crash.out" 2>&1
+ok - a pre-move crash wakes only after retry makes the item durable
+tests/fm-backlog-handoff.test.sh: line 414: 622367 Killed                     PATH="$fakebin:$PATH" FM_REAL_RM="$real_rm" FM_CONFIRM_CRASH_ONCE="$TMP_ROOT/confirm-crash.once" FM_CONFIRM_WAKE_MARKER="$home/state/.backlog-handoff-design.wake-pending" FM_HOME="$home" "$ROOT/bin/fm-backlog-handoff.sh" design confirm-crash > "$TMP_ROOT/confirm-crash.out" 2>&1
+ok - a post-confirmation crash reconciles once without suppressing a later handoff wake
+ok - an unresolved delivery attempt refuses an immediate duplicate wake
+ok - concurrent local handoffs serialize each durable move with its wake
+ok - local teardown waits for the routed move and receiver wake
+ok - failed local home removal preserves its wake and a retry retires both
+ok - body followed by another item moves intact with no source orphans
+ok - body followed by section heading moves intact; section stays
+ok - multi-paragraph body with internal blank lines moves whole and is idempotent
+ok - body as last lines of the file moves intact
+ok - EOF body before a seeded destination section keeps its boundary
+ok - untouched EOF line preserves its original terminator
+ok - body-carrying handoff is idempotent: re-run changes nothing
+ok - noncanonical one-space and tab continuations refuse without changes
+ok - indented ## Intent / ## Acceptance are body, not section boundaries
+ok - registry home parses when summary has parentheses before (home: ...)
+ok - registry entry without (home: ...) fails cleanly with has no home
+ok - handoff reports a moved item whose public commitment still binds this home
+ok - handoff says nothing about public commitments in a relay-free home
+ALL TESTS PASSED
+FM_TEST_END 2026-09-15T18:09:01Z tests/fm-backlog-handoff.test.sh exit=0 duration_ms=24178 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:09:01Z tests/fm-backlog-atomicity.test.sh family=session-bootstrap expected_gate_skip=none
+ok - backend resolution preserves unreadable configuration errors for every caller
+ok - backend resolution preserves environment, project, user, and default precedence
+ok - backlog readers and mutations refuse unresolved backends without touching either backlog
+ok - captain hold refuses backend errors and preserves relocated addressing for valid configuration
+ok - dispatch publishes the record and moves the backlog item In flight in one run
+ok - dispatch omits the markdown file when probing a Beads backlog
+ok - a leftover markdown symlink does not brick a Beads home's dispatch
+ok - completion applies and closes a Beads backlog without any markdown file
+ok - dispatch refuses to supersede a pending authoritative close
+ok - dispatch refuses held rows before creating resources
+ok - dispatch refuses dependency-blocked rows before creating resources
+ok - dispatch refuses held In-flight rows before relaunch
+ok - dispatch reads backlog rows from the backlog addressing root
+ok - recovery uses the parent of a trailing-slash data record
+ok - completion targets nested relative data from the caller directory
+ok - an immediate-child absolute data path keeps one paired backlog
+ok - bare relative data addresses one backlog through dispatch and completion
+ok - dispatch refuses symlinked backlogs without crossing homes
+ok - automatic homes refuse lifecycle mutation without compatible tasks-axi
+ok - dispatch refuses an unresolvable backlog data directory
+ok - completion refuses before mutation when backlog data is unresolvable
+ok - dispatch refuses, before creating anything, when the home has no item for the id
+ok - dispatch distinguishes backlog read failures from missing items
+ok - dispatch refuses a closed item instead of silently reopening it
+ok - dispatch cannot commit without a verified task-record publication
+ok - a failed backlog transition fails the dispatch loudly and leaves no record
+ok - dispatch reports when failed-transition rollback cannot remove its record
+ok - dispatch verifies both task and busy records during rollback
+ok - dispatch commits neither record nor backlog state before launch delivery succeeds
+ok - dispatch retries interrupted transitions before honoring termination
+ok - a signal-deferred spawn verifies its preserved state and repairs a row that did not move
+ok - a signal-deferred spawn reports attempted preservation as attempted when it cannot be verified
+ok - a signal-deferred spawn bounds its verification so an unresponsive tasks-axi cannot hold the meta lock forever
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: dirname: command not found
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: cd: null directory
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: /fm-timeout-lib.sh: No such file or directory
+ok - fm_tasks_axi bounds the call through its perl watchdog when no timeout binary exists
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: dirname: command not found
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: cd: null directory
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: /fm-timeout-lib.sh: No such file or directory
+ok - fm_tasks_axi's perl watchdog passes the child status and output through unchanged
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: dirname: command not found
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: cd: null directory
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: /fm-timeout-lib.sh: No such file or directory
+ok - fm_tasks_axi fails closed rather than running unbounded when no bounding mechanism exists
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: dirname: command not found
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: cd: null directory
+/home/mux/.no-mistakes/worktrees/b3ef60819ea4/01M2K2H0109BF4Q6R8FPVXF6YR/bin/fm-backlog-transition-lib.sh: line 80: /fm-timeout-lib.sh: No such file or directory
+ok - fm_tasks_axi's GNU timeout kills a child that ignores SIGTERM after one further bound
+ok - Kimi readiness interruptions fail before backlog commit
+ok - dispatch does not resurrect a row closed after preflight
+ok - dispatch fails when its backlog row vanishes after preflight
+ok - completion closes a local-only ship, with its landing note, before reporting success
+ok - completion closes a scout item against its report
+ok - completion leaves legacy records open when no incarnation can be recorded
+ok - completion refuses ambiguous task incarnations
+ok - completion records relocated scout reports relative to the backlog root
+ok - space-containing scout report paths round-trip through recovery
+ok - control-byte data paths fail closed before paired transitions
+ok - unreplayable data paths are refused before destructive cleanup
+ok - completion preserves recovery state when task-record removal fails
+ok - completion refuses to report success while its item is still open, and records what it owes
+ok - restart recovers closes recorded before destructive cleanup
+ok - completion refuses directory-symlink close targets
+ok - completion reports failure until its durable close marker is removed
+ok - session start retries a close whose marker could not be removed
+ok - session start reports owned backlog rows it cannot read
+ok - Orca cleanup recovery is excluded from backlog lifecycle transitions
+ok - session start marks an item In flight when this home already owns a worker for it
+ok - session start rejects internal worker-record symlinks
+ok - session start rejects symlinked worker records
+ok - session start finishes a close an interrupted cleanup recorded but never landed
+ok - recovery backfills recorded links onto already Done items
+ok - session start preserves a pending close across a transient backlog read failure
+ok - recovery preserves incomplete-cleanup evidence across a failed replay
+ok - session start finishes a close for the matching meta incarnation
+ok - recovery preserves closes for ambiguous task incarnations
+ok - recovery preserves both records when meta removal fails
+ok - recovery preserves closes beside symlinked metadata
+ok - recovery binds close-marker identity to its locked filename
+ok - recovery rejects close markers targeting another home's data
+ok - recovery validates an unterminated final marker field
+ok - recovery rejects lexical traversal before resolving marker data
+ok - recovery rejects marker control bytes before parsing
+ok - recovery rejects malformed PR URL values
+ok - a retained pending close is never started by reconciliation
+ok - recovery rejects close-marker arguments outside its protocol
+ok - recovery reports and rejects dangling symlink close markers
+ok - session start drops a close recorded for an older meta incarnation
+ok - session start rejects an unversioned close marker
+ok - bootstrap rechecks worker-record containment after locking
+ok - lifecycle files reject ancestor symlinks outside home roots
+ok - same-home state overrides remain supported
+ok - bootstrap refuses symlinked state before reconciliation
+ok - bootstrap stops when backlog data disappears before reconciliation
+ok - bootstrap preserves secondmate, manual, and absent-backlog exemptions
+ok - session start leaves a captain-held item where the captain put it
+ok - no-backlog teardown refuses symlinked records before resource actions
+ok - teardown rechecks record parents after locking
+ok - teardown refuses symlinked state before resource actions
+ok - a home with no backlog remains exempt from lifecycle transitions
+ok - spawn refuses a special-file tasks-axi config instead of blocking on it
+ok - spawn refuses an unsafe tasks-axi config before any exemption is derived from it
+ok - spawn refuses a data directory symlinked outside the home
+ok - a configured adapter refuses a data directory outside the home
+ok - dispatch and completion transition structurally with evidence
+ok - refused teardown leaves the backlog item in flight
+ok - environment-selected adapters bypass the legacy markdown file override
+ok - a manual-backlog home dispatches and completes without a hard failure
+ok - a secondmate home keeps its own books paired through dispatch and completion
+ok - dispatching a persistent secondmate needs no backlog item
+FM_TEST_END 2026-09-15T18:10:39Z tests/fm-backlog-atomicity.test.sh exit=0 duration_ms=98166 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:10:39Z tests/fm-backend-herdr-smoke.test.sh family=real-herdr-gated expected_gate_skip=herdr
+ok - real herdr: version_check accepts the installed binary's protocol
+ok - real herdr: container_ensure starts the isolated session's server, creates the firstmate workspace (fm-lab-backend-smoke-737859:w1), and reports its seeded default tab id (w1:t1)
+ok - real herdr: session status normalizes running and compatible
+ok - real herdr: container_ensure is idempotent (reuses/adopts the existing firstmate workspace, reports no seeded default tab on adoption)
+ok - real herdr: create_task prunes the freshly-created workspace's seeded default tab, leaving exactly one clean fm-<id> task tab
+ok - real herdr: create_task refuses a same-labeled tab whose pane hosts a genuinely live registered agent (unchanged behavior)
+ok - real herdr: create_task closes and replaces a same-labeled tab whose pane hosts no registered agent (the restored-husk shape), leaving the workspace intact
+ok - real herdr: a secondmate-shaped home (.fm-secondmate-home) gets its OWN herdr workspace, distinct from the primary's, in the SAME session
+ok - real herdr: the secondmate-shaped home's workspace is labeled 2ndmate-<secondmate-id> in herdr itself
+ok - real herdr: a task spawned into the secondmate-shaped home lands as a tab inside the secondmate's OWN workspace
+ok - real herdr: list_live stays scoped to each home's own workspace - neither home sees the other's tasks
+ok - real herdr: BOTH workspace ids/labels AND both tasks' pane ids survive a session stop + fresh server restart (multi-workspace shape)
+not ok - real herdr: send_text_line did not run and echo the line
+                 Does this look like >< but taller and fatter?
+
+                                 --->  ❯❮  <---
+
+(y)  Yes.
+
+(n)  No.
+
+(r)  Restart from the beginning.
+(q)  Quit and do nothing.
+
+Choice [ynrq]:
+fm-herdr-lab: missing fleet-state tripwire for 'fm-lab-backend-smoke-737859'; refusing destructive calls
+FM_TEST_END 2026-09-15T18:10:43Z tests/fm-backend-herdr-smoke.test.sh exit=1 duration_ms=3652 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:10:43Z tests/fm-backend-autodetect-smoke.test.sh family=real-herdr-gated expected_gate_skip=herdr
+not ok - fm-spawn.sh did not succeed auto-detecting herdr
+--- stdout ---
+
+--- stderr ---
+NOTICE: auto-detected herdr runtime (HERDR_ENV=1) - spawning into the EXPERIMENTAL herdr backend. Set config/backend or pass --backend tmux to opt out.
+warning: /tmp/fm-backend-autodetect-smoke.5Kvd38/data/autodetectsmoke1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/tmp/fm-backend-autodetect-smoke.5Kvd38/scratch-project': it is the spawning project itself; spawning project '/tmp/fm-backend-autodetect-smoke.5Kvd38/scratch-project'); inspect window fm-lab-fm-autodetect-sm-741543-613:w1:p2
+FM_TEST_END 2026-09-15T18:11:44Z tests/fm-backend-autodetect-smoke.test.sh exit=1 duration_ms=61421 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:11:44Z tests/fm-spawn-dispatch-profile.test.sh family=backend-dispatch expected_gate_skip=none
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+ok - secondmate launch inherits the allowlist for subsequent worker launches
+ok - local inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - remote inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - fm-spawn: actual ship/scout launch commands deliver the worker role contract
+ok - no --model/--effort records defaults and types the claude launch instructions
+ok - non-cursor launches clear inherited Cursor identity markers
+ok - relative home overrides ignore CDPATH and become absolute before spawn launch construction
+ok - FM_HOME defaults resolve relative paths and preserve absolute spellings
+ok - absolute override spellings are preserved in spawn launch paths
+ok - unresolvable relative spawn overrides fail with named diagnostics
+ok - active crew-dispatch profile requires an explicit harness for ship spawns
+ok - active crew-dispatch profile requires an explicit harness for scout spawns
+ok - active crew-dispatch profile allows an explicit resolved harness
+ok - active crew-dispatch profile allows the legacy positional harness form
+ok - active crew-dispatch profile allows the raw launch-command escape hatch
+ok - claude receives --model and --effort profile flags
+ok - codex receives --model and model_reasoning_effort profile flags
+ok - codex Luna receives --model and model_reasoning_effort max profile flags
+ok - codex omits max for models without the catalog capability
+ok - grok receives --model and --reasoning-effort profile flags
+ok - grok omits unsupported max reasoning effort
+ok - grok omits unsupported xhigh reasoning effort
+ok - cursor receives its model-qualified reasoning class and exact task workspace
+ok - cursor refuses model ids absent from its resolved binary's live catalog
+ok - cursor preserves the requested model when its live catalog is unreachable
+ok - opencode receives --model and omits the unsupported effort axis
+ok - native effort validator checks harness and model as separate axes
+ok - Ultra is explicit for native Pi and Pi-signed, including direct-PR, and refuses unsupported profiles before provisioning
+ok - batch dispatch preserves native Ultra in metadata and launch flags
+ok - pi receives --model and --thinking max profile flags
+ok - Pi launch probing omits --tui-mode on older Pi and preserves it on supporting Pi
+ok - pi-signed shares Pi launch semantics while preserving its configured and recorded identity
+ok - pi-signed refuses safely and actionably when the selected executable is unavailable
+ok - pi-signed is a distinct persistent secondmate runtime with shared Pi supervision semantics
+ok - batch dispatch forwards shared --harness, --model, and --effort to every pair
+ok - claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store
+ok - claude omits the config-dir prefix when firstmate runs with the single-store default
+ok - config/claude-permission-mode=bypass launches exactly as an absent file does
+ok - config/claude-permission-mode=auto replaces --dangerously-skip-permissions with --permission-mode auto
+ok - config/claude-permission-mode=auto reaches scout launches too
+ok - an unrecognized config/claude-permission-mode token refuses before any endpoint or metadata
+ok - config/claude-permission-mode changes claude launches only
+ok - non-claude harnesses do not receive the claude CLAUDE_CONFIG_DIR prefix
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a persistent claude secondmate keeps its supervisor contract without a task-worker authority overlay
+ok - a claude crewmate launch carries the attribution-off policy in its own settings
+ok - a claude secondmate launch carries the attribution-off policy too
+ok - active crew-dispatch profile does not block secondmate launches
+# all fm-spawn-dispatch-profile tests passed
+FM_TEST_END 2026-09-15T18:13:30Z tests/fm-spawn-dispatch-profile.test.sh exit=0 duration_ms=105864 gate_skip=false
+FM_TEST_BEGIN 2026-09-15T18:13:30Z tests/fm-spawn-worktree-settle.test.sh family=backend-dispatch expected_gate_skip=none
+ok - a single transient stale pane_current_path read is not accepted as the worktree
+ok - an already-settled pane confirms on the next read, not a whole extra cycle
+ok - a transient primary-checkout pane read is not accepted as the worktree
+ok - a pane stuck on the primary checkout fails loudly at the deadline
+# all fm-spawn-worktree-settle tests passed
+FM_TEST_END 2026-09-15T18:13:36Z tests/fm-spawn-worktree-settle.test.sh exit=0 duration_ms=5485 gate_skip=false
+FM_TEST_SUMMARY total=7 failed=2 skipped_gate=0 duration_ms=299455
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=3 duration_ms=111904 failed=0
+FM_TEST_SUMMARY_FAMILY family=real-herdr-gated count=2 duration_ms=65073 failed=2
+FM_TEST_SUMMARY_FAMILY family=secondmate count=1 duration_ms=24178 failed=0
+FM_TEST_SUMMARY_FAMILY family=session-bootstrap count=1 duration_ms=98166 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-spawn-dispatch-profile.test.sh duration_ms=105864
+FM_TEST_SLOWEST rank=2 script=tests/fm-backlog-atomicity.test.sh duration_ms=98166
+FM_TEST_SLOWEST rank=3 script=tests/fm-backend-autodetect-smoke.test.sh duration_ms=61421
+FM_TEST_SLOWEST rank=4 script=tests/fm-backlog-handoff.test.sh duration_ms=24178
+FM_TEST_SLOWEST rank=5 script=tests/fm-spawn-worktree-settle.test.sh duration_ms=5485
+FM_TEST_SLOWEST rank=6 script=tests/fm-backend-herdr-smoke.test.sh duration_ms=3652
+FM_TEST_SLOWEST rank=7 script=tests/fm-spawn-batch.test.sh duration_ms=555
+EXIT=1

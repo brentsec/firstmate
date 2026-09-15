@@ -1,0 +1,24 @@
+lab session: fm-lab-codexidle-468568-1648
+pane: w1:p1
+codex version: codex-cli 0.154.0
+post-fix herdr cursorless composer verdict: empty (after 1s)
+pre-fix (base aa92177) verdict on the SAME live screen: empty
+post-fix (HEAD 2da3c5e) verdict on the SAME live screen: empty
+braille starfield furniture observed on screen: no
+"Ask Codex to do anything" placeholder observed: yes
+
+--- live codex idle pane (plain text, last 14 non-blank rows) ---
+ries under temporary dir "/tmp" (codex_home: AbsolutePathBuf("/tmp/fm-codex-idle-live/codex-home"
+))
+╭──────────────────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.154.0)                               │
+│                                                          │
+│ model:     gpt-daybreak-blue-latest high   /model to ch… │
+│ directory: /tmp/fm-codex-idle-live/project               │
+╰──────────────────────────────────────────────────────────╯
+  Tip: This is GPT-6, a new generation of intelligence. Astra is state-of-the-art in coding,
+  computer use, science, and professional work. Give it a hard problem, a half-formed idea, or
+  anything you've been meaning to build. See where it takes you.
+• You have 3 usage limit resets available. Run /usage to use one.
+› Ask Codex to do anything
+  gpt-daybreak-blue-latest high · /tmp/fm-codex-idle-live/project

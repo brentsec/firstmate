@@ -1,0 +1,97 @@
+herdr lab session : fm-lab-fmsend-603813-11610
+live pane         : w1:p1
+
+#############################################################
+# 1. ADVERSARIAL: a marked secondmate steer with NO message  #
+#############################################################
+
+===== empty marked secondmate steer =====
+$ fm-send.sh domain
+exit: 1
+stderr:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the requested message WILL still be sent.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)
+--- durable state after the empty steer ---
+inbox records: none (state/domain.inbox does not exist)
+pending-reply expectations: none (no state/pending-replies directory)
+--- live herdr pane w1:p1 after the empty steer ---
+1: mux@muxtop002  /tmp/fm-send-live/home                                     ✔  32  11:07:35
+
+#############################################################
+# 2. ADVERSARIAL: an explicit empty-string message           #
+#############################################################
+
+===== explicit empty-string message =====
+$ fm-send.sh domain 
+exit: 1
+stderr:
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)
+--- durable state after the empty-string steer ---
+inbox records: none (state/domain.inbox does not exist)
+pending-reply expectations: none (no state/pending-replies directory)
+
+#############################################################
+# 3. ADVERSARIAL: a whitespace-only message                  #
+#############################################################
+
+===== whitespace-only message =====
+$ fm-send.sh domain    
+exit: 1
+stderr:
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)
+--- durable state after the whitespace-only steer ---
+inbox records: none (state/domain.inbox does not exist)
+pending-reply expectations: none (no state/pending-replies directory)
+
+#############################################################
+# 4. ADVERSARIAL: whitespace-only across multiple arguments  #
+#############################################################
+
+===== tab + newline only =====
+$ fm-send.sh domain 	 
+
+exit: 1
+stderr:
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: a text steer requires a nonempty message; nothing was sent (an empty marked request would deliver only marker and correlation bytes and leave the parent waiting on a reply to nothing)
+--- durable state after the tab/newline steer ---
+inbox records: none (state/domain.inbox does not exist)
+pending-reply expectations: none (no state/pending-replies directory)
+
+#############################################################
+# 5. HAPPY PATH: a real message still delivers               #
+#############################################################
+
+===== real message =====
+$ fm-send.sh domain please re-read the brief and confirm
+exit: 0
+stderr:
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-send: doorbell not typed because the agent in fm-lab-fmsend-603813-11610:w1:p1 has exited; the steer is durably recorded at /tmp/fm-send-live/home/state/domain.inbox/001.msg for recovery (stuck-crewmate-recovery), and the watcher will not re-ring a dead pane
+--- durable state after the real steer ---
+inbox records: 1
+  state/domain.inbox/001.msg
+pending-reply expectations: 1
+--- live herdr pane w1:p1 after the real steer ---
+1: mux@muxtop002  /tmp/fm-send-live/home                                     ✔  32  11:07:35
+--- recorded inbox body ---
+[fm-from-firstmate]⁣corr=798a14d993d7d0f5 please re-read the brief and confirm
+#############################################################
+# 6. The --key lifecycle path takes no text and is unaffected#
+#############################################################
+
+===== --key Enter =====
+$ fm-send.sh domain --key Enter
+exit: 0
+stderr:
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+--- live herdr pane w1:p1 after --key Enter ---
+1: mux@muxtop002  /tmp/fm-send-live/home                                     ✔  32  11:07:35

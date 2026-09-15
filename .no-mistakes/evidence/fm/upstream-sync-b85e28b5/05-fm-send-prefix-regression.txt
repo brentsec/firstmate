@@ -1,0 +1,10 @@
+pre-fix tree extracted at base commit: aa92177
+
+=== PRE-FIX (base aa92177): empty marked secondmate steer ===
+fm-send: doorbell not typed because the agent in fm-lab-fmsendpre-610094-20154:w1:p1 has exited; the steer is durably recorded at /tmp/fm-send-live/home-prefix/state/domain.inbox/001.msg for recovery (stuck-crewmate-recovery), and the watcher will not re-ring a dead pane
+exit: 0
+--- durable state left behind by the PRE-FIX empty steer ---
+inbox records: 1
+  001.msg body -> [fm-from-firstmate]M-bM-^AM-#corr=e5812b920d04b848 
+pending-reply expectations minted: 1
+  state/pending-replies/e5812b920d04b848

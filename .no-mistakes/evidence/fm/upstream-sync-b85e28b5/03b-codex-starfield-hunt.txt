@@ -1,0 +1,25 @@
+lab session: fm-lab-codexstar-477444-11993   pane: w1:p1
+codex version: codex-cli 0.154.0
+frames sampled: 400; frames carrying braille furniture: 0
+classified frame: /tmp/fm-codex-idle-live/codex-last.ansi
+
+=== verdict on the captured LIVE codex 0.154 idle frame (herdr cursorless styled profile) ===
+pre-fix  library (base aa92177): empty
+post-fix library (HEAD 2da3c5e): empty
+
+=== the frame as codex drew it (plain text) ===
+1:WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper bina
+2:ries under temporary dir "/tmp" (codex_home: AbsolutePathBuf("/tmp/fm-codex-idle-live/codex-home2
+3:"))
+4:╭──────────────────────────────────────────────────────────╮
+5:│ >_ OpenAI Codex (v0.154.0)                               │
+6:│                                                          │
+7:│ model:     gpt-daybreak-blue-latest high   /model to ch… │
+8:│ directory: /tmp/fm-codex-idle-live/project               │
+9:╰──────────────────────────────────────────────────────────╯
+11:  Tip: This is GPT-6, a new generation of intelligence. Astra is state-of-the-art in coding,
+12:  computer use, science, and professional work. Give it a hard problem, a half-formed idea, or
+13:  anything you've been meaning to build. See where it takes you.
+15:• You have 3 usage limit resets available. Run /usage to use one.
+18:› Ask Codex to do anything
+20:  gpt-daybreak-blue-latest high · /tmp/fm-codex-idle-live/project

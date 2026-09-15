@@ -1,0 +1,212 @@
+<!doctype html><meta charset="utf-8">
+<title>Live validation - firstmate upstream sync aa92177..2da3c5e</title>
+<style>
+ :root{--bg:#0f1115;--panel:#161a21;--line:#252b35;--ink:#dfe3ea;--mute:#98a1b0;
+        --bad:#ff7b72;--good:#56d364;--accent:#79b8ff}
+ *{box-sizing:border-box;min-width:0}
+ body{margin:0;padding:32px;background:var(--bg);color:var(--ink);
+       font:14px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,sans-serif}
+ header{max-width:1500px;margin:0 auto 26px}
+ h1{font-size:21px;margin:0 0 6px;letter-spacing:-.2px}
+ header p{margin:0;color:var(--mute);max-width:95ch}
+ .wrap{max-width:1500px;margin:0 auto;display:grid;gap:20px}
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+ h2{font-size:15px;margin:0 0 4px}
+ .sub{margin:0 0 14px;color:var(--mute);font-size:13px;max-width:110ch}
+ .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+ .col{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0b0d11;min-width:0}
+ .tag{padding:7px 12px;font-size:12px;font-weight:650;letter-spacing:.3px;
+       border-bottom:1px solid var(--line)}
+ .bad .tag{color:var(--bad);background:rgba(255,123,114,.08)}
+ .good .tag{color:var(--good);background:rgba(86,211,100,.08)}
+ pre{margin:0;padding:12px 14px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;
+      font:12px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color:#cdd3dc}
+ .single pre{border:1px solid var(--line);border-radius:9px;background:#0b0d11}
+ .pane{border:1px solid var(--line);border-radius:9px;background:#07090c;padding:14px 16px}
+ .dots{display:flex;gap:6px;margin-bottom:10px} .dots i{width:10px;height:10px;border-radius:50%;display:block}
+ .verdicts{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+ .v{font:12px/1 ui-monospace,monospace;padding:7px 11px;border-radius:7px;border:1px solid var(--line)}
+ .v b{font-weight:700}
+ .v.ok{color:var(--good);border-color:rgba(86,211,100,.4)}
+ .v.info{color:var(--accent);border-color:rgba(121,184,255,.35)}
+</style>
+<header>
+  <h1>Live validation &mdash; firstmate fork synced to upstream <code>2da3c5e</code></h1>
+  <p>Every panel below was produced in this run by driving the real commands: real <code>codex-cli 0.154.0</code>
+     in a real isolated Herdr pane, the real <code>bin/fm-send.sh</code> against a live Herdr endpoint, and the real
+     <code>bin/fm-captain-hold.sh</code> / <code>bin/fm-teardown.sh</code> against a real tasks-axi backlog.
+     "Before" runs the same scenario against the pre-sync tree at base <code>aa92177</code>.</p>
+</header>
+<div class="wrap">
+
+<section class="card single">
+  <h2>1. The sync itself</h2>
+  <p class="sub">The fork's branch head resolves to exactly upstream <code>kunchenguid/firstmate</code> <code>main</code>; the fork's old main is an ancestor, the range holds only the three official commits, no merge commits, no conflict residue.</p>
+  <pre>### upstream ref
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d	refs/heads/main
+
+### local HEAD
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d
+
+### tree of local HEAD
+2f0d099653525273ecf810204ff145880b30a4cf
+
+### base is ancestor of HEAD?
+yes: aa92177 is an ancestor of HEAD
+
+### commits base..HEAD (exactly the upstream commits, no extras)
+2da3c5e2193cb725bf173b7dfcbf8b094c4b862d fix(bin): refuse empty text steers in fm-send (#4259)
+8b10b61e3feace8f275c6d0b3e490cdf7ab1f67d fix(bin): read codex 0.154&#x27;s idle braille starfield rows as composer furniture (#4532)
+b85e28b5f8aad91a553e33d461da9f238bbdac38 fix(bin): make captain holds work on hosts with an older JSON::PP, and stop cleanup dropping accents from a held body (#4471)
+
+### merge commits in range (expect none)
+(end)
+
+### working tree clean / no conflict markers in changed files
+(end status)
+(end conflict scan)</pre>
+</section>
+
+<section class="card">
+  <h2>2. Steering a secondmate with an empty message (#4255 stall)</h2>
+  <p class="sub">A marked secondmate request sent with no message used to deliver only marker and correlation bytes and mint a pending-reply expectation the parent could never see resolved. Driven end to end against a live Herdr endpoint.</p>
+  <div class="split">
+    <div class="col bad"><div class="tag">BEFORE &mdash; pre-sync tree aa92177</div><pre>$ fm-send.sh domain          # a marked secondmate steer with NO message
+fm-send: doorbell not typed because the agent in &lt;pane&gt; has exited;
+         the steer is durably recorded at state/domain.inbox/001.msg
+exit: 0
+
+--- durable state left behind by the PRE-FIX empty steer ---
+inbox records: 1
+  001.msg body -&gt; [fm-from-firstmate]corr=e5812b920d04b848
+                  (marker and correlation bytes only - no message)
+pending-reply expectations minted: 1
+  state/pending-replies/e5812b920d04b848
+                  (the parent waits on a reply to nothing)</pre></div>
+    <div class="col good"><div class="tag">AFTER &mdash; synced tree 2da3c5e</div><pre>$ fm-send.sh domain          # a marked secondmate steer with NO message
+exit: 1
+stderr:
+  error: a text steer requires a nonempty message; nothing was sent
+  (an empty marked request would deliver only marker and correlation bytes
+   and leave the parent waiting on a reply to nothing)
+
+--- durable state after the empty steer ---
+inbox records: none (state/domain.inbox does not exist)
+pending-reply expectations: none (no state/pending-replies directory)
+--- live herdr pane w1:p1 after the empty steer ---
+ (unchanged - nothing was typed)
+
+... and identically for &quot;&quot; , &quot;   &quot; and a tab+newline argument list.
+
+$ fm-send.sh domain please re-read the brief and confirm
+exit: 0
+inbox records: 1  -&gt; state/domain.inbox/001.msg
+body: [fm-from-firstmate]corr=798a14d993d7d0f5 please re-read the brief and confirm
+pending-reply expectations: 1</pre></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>3. Recording a captain decision where JSON::PP defaults allow_nonref off</h2>
+  <p class="sub">On such a host a worker could not formally record a decision for the captain at all &mdash; the hold reported that the task lost its hold-set stamp.</p>
+  <div class="single"><pre># Defect 1: recording a captain decision on an older-JSON::PP host  #
+#####################################################################
+
+===== PRE-FIX tree (base aa92177) =====
+$ fm-captain-hold.sh hold sample-nonref-body --reason &quot;captain go needed&quot;   (JSON::PP allow_nonref default OFF)
+exit: 1
+stderr:
+  JSON text must be an object or array (but found number, string, true, false or null, use allow_nonref to allow this) at -e line 3.
+  JSON text must be an object or array (but found number, string, true, false or null, use allow_nonref to allow this) at -e line 3.
+  fm-captain-hold: task sample-nonref-body did not retain its hold-set stamp
+row state:
+    hold_kind: &quot;-&quot;
+    body: &quot;Captain hold set: 2026-09-15T18:09:36Z\n\nFirst line of the plan.&quot;
+  -&gt; hold_kind captain     : NO
+  -&gt; hold-set stamp present: yes
+  -&gt; original body kept    : yes
+
+===== POST-FIX tree (HEAD 2da3c5e) =====
+$ fm-captain-hold.sh hold sample-nonref-body --reason &quot;captain go needed&quot;   (JSON::PP allow_nonref default OFF)
+exit: 0
+stdout:
+  sample-nonref-body
+row state:
+    hold_kind: captain
+    body: &quot;Captain hold set: 2026-09-15T18:09:36Z\n\nFirst line of the plan.&quot;
+  -&gt; hold_kind captain     : yes
+  -&gt; hold-set stamp present: yes
+  -&gt; original body kept    : yes</pre></div>
+</section>
+
+<section class="card">
+  <h2>4. An accented body surviving cleanup's rewrite</h2>
+  <p class="sub">Cleanup rewrites a captain-held row's body to append the finished work's deliverable. Asserted on bytes: <code>c3 a9</code> (UTF-8 &eacute;) rather than a single latin-1 byte.</p>
+  <div class="single"><pre>===== PRE-FIX tree (base aa92177) =====
+body written into the row (UTF-8 bytes):  54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69
+ 6f 6e 20 69 73 20 73 74 69 6c 6c 20 6f 70 65 6e
+$ fm-teardown.sh sample-accent-scout   (cleanup retains the captain-held row and appends the deliverable)
+exit: 0
+stderr:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  WATCHER DOWN - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  ●  Trust the emitted supervision protocol for this harness; do not use shell &amp; for watcher repair.
+  ●  This is a supervision warning only; the guarded operation WILL still run.
+retained row body line:
+    body: &quot;Captain hold set: 2026-09-15T18:10:13Z\n\nThe caf� decision is still open.\n\nDeliverable of the finished work: report data/sample-accent-scout/report.md&quot;
+deliverable appended        : yes
+accent survived as UTF-8 (c3 a9)   : NO
+raw bytes around the accent        :  5c 6e 54 68 65 20 63 61 66 ef bf bd 20 64 65 63 69 73 69 0a 
+row body renders as               : The caf� decision
+
+===== POST-FIX tree (HEAD 2da3c5e) =====
+body written into the row (UTF-8 bytes):  54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69
+ 6f 6e 20 69 73 20 73 74 69 6c 6c 20 6f 70 65 6e
+$ fm-teardown.sh sample-accent-scout   (cleanup retains the captain-held row and appends the deliverable)
+exit: 0
+stderr:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  WATCHER DOWN - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  ●  Trust the emitted supervision protocol for this harness; do not use shell &amp; for watcher repair.
+  ●  This is a supervision warning only; the guarded operation WILL still run.
+retained row body line:
+    body: &quot;Captain hold set: 2026-09-15T18:10:15Z\n\nThe café decision is still open.\n\nDeliverable of the finished work: report data/sample-accent-scout/report.md&quot;
+deliverable appended        : yes
+accent survived as UTF-8 (c3 a9)   : yes
+raw bytes around the accent        :  5c 6e 54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69 0a 
+row body renders as               : The café decision</pre></div>
+</section>
+
+<section class="card">
+  <h2>5. A live idle codex 0.154 pane reads as an empty composer</h2>
+  <p class="sub">Captured from a real codex-cli 0.154.0 sitting idle in an isolated Herdr pane and classified through the production adapter <code>fm_backend_herdr_composer_state</code> (styled=1, cursor=0, identity=1, rows=20) &mdash; the cursorless profile the fix targets. The pane is what the steering doorbell must reach.</p>
+  <div class="pane"><div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><pre>WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper bina
+ries under temporary dir &quot;/tmp&quot; (codex_home: AbsolutePathBuf(&quot;/tmp/fm-codex-idle-live/codex-home3
+&quot;))
+╭────────────────────────────────────────────────╮
+│ &gt;_ OpenAI Codex (v0.154.0)                     │
+│                                                │
+│ model:     gpt-6-astra high   /model to change │
+│ directory: /tmp/fm-codex-idle-live/project     │
+╰────────────────────────────────────────────────╯
+
+  Tip: This is GPT-6, a new generation of intelligence. Astra is state-of-the-art in coding,
+  computer use, science, and professional work. Give it a hard problem, a half-formed idea, or
+  anything you&#x27;ve been meaning to build. See where it takes you.
+
+• You have 3 usage limit resets available. Run /usage to use one.
+ 
+ 
+› Ask Codex to do anything
+ 
+  gpt-6-astra high · /tmp/fm-codex-idle-live/project</pre></div>
+  <div class="verdicts">
+    <span class="v ok">herdr cursorless styled read &rarr; <b>empty</b></span>
+    <span class="v info">codex --version &rarr; <b>codex-cli 0.154.0</b></span>
+    <span class="v info">braille starfield drawn on this host &rarr; <b>no</b> (see testing notes)</span>
+  </div>
+</section>
+
+</div>

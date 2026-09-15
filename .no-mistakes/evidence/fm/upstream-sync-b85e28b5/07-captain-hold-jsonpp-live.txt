@@ -1,0 +1,32 @@
+installed JSON::PP on this host: 4.16
+with the older default forced back off, decode_json on a bare scalar: rejects
+
+#####################################################################
+# Defect 1: recording a captain decision on an older-JSON::PP host  #
+#####################################################################
+
+===== PRE-FIX tree (base aa92177) =====
+$ fm-captain-hold.sh hold sample-nonref-body --reason "captain go needed"   (JSON::PP allow_nonref default OFF)
+exit: 1
+stderr:
+  JSON text must be an object or array (but found number, string, true, false or null, use allow_nonref to allow this) at -e line 3.
+  JSON text must be an object or array (but found number, string, true, false or null, use allow_nonref to allow this) at -e line 3.
+  fm-captain-hold: task sample-nonref-body did not retain its hold-set stamp
+row state:
+    hold_kind: "-"
+    body: "Captain hold set: 2026-09-15T18:09:36Z\n\nFirst line of the plan."
+  -> hold_kind captain     : NO
+  -> hold-set stamp present: yes
+  -> original body kept    : yes
+
+===== POST-FIX tree (HEAD 2da3c5e) =====
+$ fm-captain-hold.sh hold sample-nonref-body --reason "captain go needed"   (JSON::PP allow_nonref default OFF)
+exit: 0
+stdout:
+  sample-nonref-body
+row state:
+    hold_kind: captain
+    body: "Captain hold set: 2026-09-15T18:09:36Z\n\nFirst line of the plan."
+  -> hold_kind captain     : yes
+  -> hold-set stamp present: yes
+  -> original body kept    : yes

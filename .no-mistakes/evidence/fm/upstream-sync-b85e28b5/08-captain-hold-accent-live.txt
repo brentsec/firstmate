@@ -1,0 +1,39 @@
+#####################################################################
+# Defect 2: an accented body surviving cleanup's rewrite            #
+#####################################################################
+
+===== PRE-FIX tree (base aa92177) =====
+body written into the row (UTF-8 bytes):  54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69
+ 6f 6e 20 69 73 20 73 74 69 6c 6c 20 6f 70 65 6e
+$ fm-teardown.sh sample-accent-scout   (cleanup retains the captain-held row and appends the deliverable)
+exit: 0
+stderr:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  WATCHER DOWN - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  ●  This is a supervision warning only; the guarded operation WILL still run.
+retained row body line:
+    body: "Captain hold set: 2026-09-15T18:10:13Z\n\nThe caf� decision is still open.\n\nDeliverable of the finished work: report data/sample-accent-scout/report.md"
+deliverable appended        : yes
+accent survived as UTF-8 (c3 a9)   : NO
+raw bytes around the accent        :  5c 6e 54 68 65 20 63 61 66 ef bf bd 20 64 65 63 69 73 69 0a 
+row body renders as               : The caf� decision
+
+===== POST-FIX tree (HEAD 2da3c5e) =====
+body written into the row (UTF-8 bytes):  54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69
+ 6f 6e 20 69 73 20 73 74 69 6c 6c 20 6f 70 65 6e
+$ fm-teardown.sh sample-accent-scout   (cleanup retains the captain-held row and appends the deliverable)
+exit: 0
+stderr:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  WATCHER DOWN - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  ●  This is a supervision warning only; the guarded operation WILL still run.
+retained row body line:
+    body: "Captain hold set: 2026-09-15T18:10:15Z\n\nThe café decision is still open.\n\nDeliverable of the finished work: report data/sample-accent-scout/report.md"
+deliverable appended        : yes
+accent survived as UTF-8 (c3 a9)   : yes
+raw bytes around the accent        :  5c 6e 54 68 65 20 63 61 66 c3 a9 20 64 65 63 69 73 69 0a 
+row body renders as               : The café decision
