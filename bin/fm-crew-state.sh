@@ -217,6 +217,9 @@ if [ -n "$REMOTE_HOST" ]; then
     permission-drift)
       emit unknown remote-endpoint "remote Claude process lacks the permission posture its launch recorded on $REMOTE_HOST; relaunch in place"
       ;;
+    ambiguous)
+      emit unknown remote-endpoint "the top-level Claude process on $REMOTE_HOST carries both permission flags; reconcile the endpoint before any lifecycle action"
+      ;;
     dead|missing)
       emit unknown remote-endpoint "remote endpoint $REMOTE_STATE on $REMOTE_HOST"
       ;;

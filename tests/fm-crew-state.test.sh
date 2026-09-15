@@ -2132,6 +2132,30 @@ test_remote_dead_reports_remote_verdict() {
   pass "fm-crew-state remote: the remote host's own dead verdict is reported truthfully"
 }
 
+# A remote host's own conclusive posture verdict is evidence about the worker,
+# not about the transport. It must carry the same reconcile-before-lifecycle
+# wording the local arm, startup, monitoring, and control use, and must never
+# be presented as the unreachable-host reading reserved for transport blips.
+test_remote_ambiguous_posture_is_not_an_unreachable_reading() {
+  reset_fakes
+  local d out rc
+  d=$(setup_remote_case remote-ambiguous)
+  make_fakebin "$d" >/dev/null
+  printf 'working: refactoring the quota adapter\n' > "$d/state/rsm.status"
+  out=$(FM_FAKE_REMOTE_STATE_OUT=ambiguous FM_FAKE_SSH_RC=0 run_remote_crew_state "$d" rsm); rc=$?
+  expect_code 0 "$rc" "remote ambiguous posture exits 0"
+  assert_contains "$out" "carries both permission flags" \
+    "the remote reader must name why the posture cannot be attributed"
+  assert_contains "$out" "reconcile the endpoint before any lifecycle action" \
+    "the remote reader must use the same reconcile wording as the local arm"
+  assert_contains "$out" "remote-mac" "the remote verdict must name the host it came from"
+  assert_not_contains "$out" "unknown-remote" \
+    "a conclusive remote posture verdict must not be labeled unknown-remote"
+  assert_not_contains "$out" "not proof of death" \
+    "a conclusive remote posture verdict must not reuse the transport-blip bucket"
+  pass "fm-crew-state remote: an ambiguous posture reports the conflict, not an unreachable host"
+}
+
 test_missing_meta() {
   reset_fakes
   local d; d=$(new_case nometa)
@@ -2677,6 +2701,7 @@ test_remote_alive_with_log_uses_status_log
 test_remote_alive_idle_is_healthy_not_gone
 test_remote_unreachable_is_unknown_remote_not_dead
 test_remote_dead_reports_remote_verdict
+test_remote_ambiguous_posture_is_not_an_unreachable_reading
 test_missing_meta
 test_provably_working_via_runs_list_fallback
 test_not_provably_working_when_stopped
