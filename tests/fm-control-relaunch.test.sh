@@ -1206,6 +1206,34 @@ test_missing_worktree_refuses_before_stopping_anything() {
   pass "fm-control relaunch: an unaccountable local copy refuses before the agent is touched"
 }
 
+# A relaunch stops the running agent before fm-spawn.sh would resolve the launch
+# posture, so an unparseable config/claude-permission-mode used to take the
+# worker down and only then refuse to replace it. The value must be resolved
+# before anything is stopped, leaving the live agent exactly where it was.
+test_unparseable_permission_mode_refuses_before_stopping_anything() {
+  local dir out rc before after
+  dir=$(new_case badperm rl44)
+  add_ship_task "$dir" rl44 claude
+  mkdir -p "$dir/home/config"
+  printf 'Bypass\n' > "$dir/home/config/claude-permission-mode"
+  before=$(cat "$dir/home/state/rl44.meta")
+
+  out=$(run_control "$dir" rl44 relaunch --note "x"); rc=$?
+  expect_code 1 "$rc" "an unparseable permission mode should refuse the relaunch"$'\n'"$out"
+  [ "$(cat "$dir/fake/command")" = claude ] \
+    || fail "an unparseable permission mode must leave the old agent running"
+  assert_no_grep "/exit" "$dir/fake/literal" \
+    "the exit command must not be typed before the permission mode is resolved"
+  after=$(cat "$dir/home/state/rl44.meta")
+  [ "$before" = "$after" ] \
+    || fail "a permission-mode refusal must leave the durable record byte-identical"
+  assert_contains "$out" "claude-permission-mode" \
+    "the refusal should name the file the captain has to repair"
+  assert_contains "$out" "agent is untouched" \
+    "the refusal should state that the running worker was left alone"
+  pass "fm-control relaunch: an unparseable permission mode refuses with the worker still alive"
+}
+
 test_missing_instructions_refuse_before_stopping_anything() {
   local dir out rc
   dir=$(new_case nobrief rl11)
@@ -1812,6 +1840,7 @@ test_prefixed_prior_harness_wiring_is_still_retired
 test_muse_session_binding_is_retired_on_a_harness_switch
 test_cursor_session_binding_is_retired_on_a_harness_switch
 test_missing_worktree_refuses_before_stopping_anything
+test_unparseable_permission_mode_refuses_before_stopping_anything
 test_missing_instructions_refuse_before_stopping_anything
 test_checkpoint_refusal_leaves_the_record_byte_identical
 test_checkpoint_refuses_uninspectable_head_and_status

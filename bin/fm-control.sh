@@ -141,6 +141,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-claude-permission-lib.sh
+. "$SCRIPT_DIR/fm-claude-permission-lib.sh"
 
 POLL=${FM_CONTROL_POLL:-0.5}
 SETTLE_WAIT=${FM_CONTROL_SETTLE_WAIT:-5}
@@ -810,6 +812,14 @@ do_relaunch() {
 
   require_state_verified_backend relaunch
   resolve_relaunch_profile
+
+  # A relaunch stops the running agent before fm-spawn.sh gets to resolve the
+  # launch posture, so resolve it HERE, before any mutation, exactly as
+  # bin/fm-spawn.sh does for a spawn. An unparseable config/claude-permission-mode
+  # would otherwise refuse only after the worker was already gone.
+  # bin/fm-claude-permission-lib.sh stays the only parser and prints the reason.
+  fm_claude_permission_mode "$FM_BACKEND_CONFIG_DIR" >/dev/null \
+    || die "task $ID was not relaunched and its agent is untouched; repair config/claude-permission-mode first"
 
   case "$KIND" in
     ship|scout)
