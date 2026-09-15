@@ -1102,6 +1102,7 @@ pass "cross-home stale recovery removes abandoned output from the old state dire
 HR="$TMP_ROOT/hr"; new_home "$HR"
 RACE_TRIGGER="$TMP_ROOT/race-trigger"
 RACE_LOG="$TMP_ROOT/race-executions"
+RACE_OUT="$TMP_ROOT/race-contenders"
 RACE_BLOCKER="$TMP_ROOT/race-blocker.sh"
 cat > "$RACE_BLOCKER" <<'SH'
 #!/usr/bin/env bash
@@ -1113,16 +1114,33 @@ chmod +x "$RACE_BLOCKER"
 pe_register "$HR" lavish race-src -- "$RACE_BLOCKER" "$RACE_LOG" "$RACE_TRIGGER" >/dev/null
 printf '%s\n%s\nold-token\nold-identity\n' "$TMP_ROOT/gone-home" 999999 > "$FM_PROCEVENT_CLAIM_ROOT/race-src.claim"
 chmod 0600 "$FM_PROCEVENT_CLAIM_ROOT/race-src.claim"
+mkdir -p "$RACE_OUT"
 race_pids=()
-for _ in $(seq 1 24); do
-  pe "$HR" start race-src >/dev/null &
+for race_n in $(seq 1 24); do
+  pe "$HR" start race-src > "$RACE_OUT/$race_n.out" 2> "$RACE_OUT/$race_n.err" &
   race_pids+=("$!")
 done
-wait_for "$RACE_LOG" || fail "no contender acquired the stale claim"
+# Every contender pays a full isolated runner start-up before the first one can
+# claim, and the winner then re-enters the source lock against the other 23 for
+# its launch stamp, so the first start scales with the contention this test
+# creates rather than settling inside a fixed window. On a two-vCPU hosted
+# runner it passed ten seconds while still starting exactly one runner, so the
+# bound below is one only a genuinely stuck race exceeds; the exactly-one
+# assertion is the contract, not the latency.
+wait_for "$RACE_LOG" 600 || fail "no contender acquired the stale claim"
 sleep 0.5
 [ "$(wc -l < "$RACE_LOG" | tr -d ' ')" = 1 ] || fail "stale-claim race started more than one runner"
 : > "$RACE_TRIGGER"
-for race_pid in "${race_pids[@]}"; do wait "$race_pid" 2>/dev/null || true; done
+race_failed=0
+for race_pid in "${race_pids[@]}"; do wait "$race_pid" || race_failed=$((race_failed + 1)); done
+# Every contender must end in one of the two legitimate outcomes - it saw the
+# live replacement claim, or it ran the source after that claim was released -
+# so a contender that died on the way to the lock cannot hide behind the winner.
+[ "$race_failed" -eq 0 ] \
+  || fail "$race_failed stale-claim contenders exited non-zero: $(cat "$RACE_OUT"/*.err 2>/dev/null)"
+race_settled=$(cat "$RACE_OUT"/*.out | grep -c -E '^(already owned: race-src|captured: )')
+[ "$race_settled" = 24 ] \
+  || fail "expected all 24 stale-claim contenders to report already owned or captured, got $race_settled"
 pass "concurrent stale-claim replacement starts exactly one runner"
 
 # --- a crashed runner leader must not make its live child group look stale ---
