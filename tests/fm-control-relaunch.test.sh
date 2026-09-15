@@ -50,7 +50,11 @@ trap relaunch_cleanup EXIT
 # The same lifecycle-modelling tmux stub as tests/fm-control.test.sh: the
 # harness's exit command stops the agent, and a launch-brief literal starts the
 # harness named in `becomes`.
-make_herdr_duplicate_stub() {  # <dir>
+# A Herdr endpoint whose top-level Claude worker (the foreground process
+# group leader) carries both permission flags at once, beside a nested claude
+# CLI it runs itself: the worker's own posture is ambiguous, and the
+# conforming child can never settle it.
+make_herdr_conflicting_stub() {  # <dir>
   local fb="$1/fakebin"
   cat > "$fb/herdr" <<'SH'
 #!/usr/bin/env bash
@@ -69,7 +73,7 @@ case "${1:-} ${2:-}" in
       [ "$1" != --pane ] || { pane=${2:-}; break; }
       shift
     done
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":424200,"foreground_processes":[{"pid":424201,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]},{"pid":424202,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane"
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":424200,"foreground_process_group_id":424201,"foreground_processes":[{"pid":424201,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123","--dangerously-skip-permissions","--permission-mode","auto"]},{"pid":424202,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane"
     ;;
 esac
 exit 0
@@ -333,9 +337,9 @@ SH
   chmod +x "$dir/fakebin/tasks-axi"
 }
 
-test_relaunch_refuses_ambiguous_restored_claude_duplicates() {
+test_relaunch_refuses_an_ambiguous_top_level_claude_posture() {
   local dir out rc before_meta
-  dir=$(new_case herdr-duplicate rl44)
+  dir=$(new_case herdr-conflicting rl44)
   add_ship_task "$dir" rl44 claude
   {
     printf '%s\n' 'window=lab:w1:p2'
@@ -356,22 +360,22 @@ test_relaunch_refuses_ambiguous_restored_claude_duplicates() {
     printf '%s\n' 'herdr_pane_id=w1:p2'
     printf '%s\n' 'claude_permission_mode=bypass'
   } > "$dir/home/state/rl44.meta"
-  make_herdr_duplicate_stub "$dir"
+  make_herdr_conflicting_stub "$dir"
   before_meta=$(cat "$dir/home/state/rl44.meta")
 
-  out=$(run_control "$dir" rl44 relaunch --note "do not trust restored duplicates"); rc=$?
-  [ "$rc" -ne 0 ] || fail "ambiguous restored Claude duplicates must refuse relaunch"
+  out=$(run_control "$dir" rl44 relaunch --note "do not trust a conflicting posture"); rc=$?
+  [ "$rc" -ne 0 ] || fail "a top-level Claude process carrying both permission flags must refuse relaunch"
   assert_contains "$out" "reads 'ambiguous'" \
-    "the public control plane must name the ambiguous process ownership"
+    "the public control plane must name the ambiguous posture"
   [ "$(cat "$dir/home/state/rl44.meta")" = "$before_meta" ] \
-    || fail "an ambiguous duplicate refusal changed the task endpoint record"
+    || fail "an ambiguous posture refusal changed the task endpoint record"
   assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-text" \
-    "an ambiguous duplicate refusal must not type a lifecycle command"
+    "an ambiguous posture refusal must not type a lifecycle command"
   assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-keys" \
-    "an ambiguous duplicate refusal must not send a lifecycle key"
+    "an ambiguous posture refusal must not send a lifecycle key"
   [ -z "$(git -C "$dir/wt" status --porcelain)" ] \
-    || fail "an ambiguous duplicate refusal changed the isolated copy"
-  pass "fm-control refuses ambiguous restored Claude duplicates without touching the endpoint or copy"
+    || fail "an ambiguous posture refusal changed the isolated copy"
+  pass "fm-control refuses an ambiguous top-level Claude posture without touching the endpoint or copy"
 }
 
 # --- 1. same-harness relaunch -----------------------------------------------
@@ -1807,7 +1811,7 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
   pass "relaunch heals an item that drifted out of In flight while the task stayed live"
 }
 
-test_relaunch_refuses_ambiguous_restored_claude_duplicates
+test_relaunch_refuses_an_ambiguous_top_level_claude_posture
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven

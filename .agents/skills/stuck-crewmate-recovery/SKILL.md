@@ -29,7 +29,7 @@ Recover a genuinely stuck remote mate only through `bin/fm-spawn.sh <id> --secon
 
 Treat the digest's endpoint result as a presence signal, not proof that the task's work or validation run is gone.
 A `permission-drift` result is different: one live Claude process was attributed, but its exact argv lacks the permission posture the task's own launch recorded.
-It remains alive for duplicate prevention and must be replaced only through the control-plane relaunch below; an ambiguous duplicate-Claude result refuses until ownership is reconciled.
+It remains alive for duplicate prevention and must be replaced only through the control-plane relaunch below; an ambiguous result, the top-level Claude process carrying both permission flags, refuses until ownership is reconciled, and a nested `claude` command the worker itself runs is never attributed.
 Read the targeted current state with `bin/fm-crew-state.sh <id>` before deciding to relaunch.
 A no-mistakes run matched to the crew's branch and current code remains authoritative when the endpoint is dead: handle a terminal or parked run through the normal lifecycle, and keep supervising an active run instead of creating a duplicate worker.
 

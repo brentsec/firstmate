@@ -313,7 +313,10 @@ SH
 
 # make_liveness_herdr <dir>: a process-info fixture for the exact restored
 # Claude states the Herdr adapter exposes to the bootstrap sweep. The generic
-# pane-liveness pass and policy pass both read the same foreground process set.
+# pane-liveness pass and policy pass both read the same foreground process set,
+# whose group leader (pid 4101, the pane's foreground job) is the top-level
+# worker posture attribution anchors on; 4102 is a claude CLI that worker runs
+# from its own shell tool.
 make_liveness_herdr() {
   local dir=$1 fakebin
   fakebin=$(fm_fakebin "$dir")
@@ -338,11 +341,17 @@ case "${1:-} ${2:-}" in
         foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"]}]'
         ;;
       ambiguous)
-        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session"]},{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]'
+        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session","--dangerously-skip-permissions","--permission-mode","auto"]}]'
+        ;;
+      nested)
+        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"]},{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","-p","summarize the diff"]}]'
+        ;;
+      drift-nested)
+        foreground='[{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--version"]},{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session"]}]'
         ;;
       *) exit 1 ;;
     esac
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_processes":%s}}}\n' \
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":4101,"foreground_processes":%s}}}\n' \
       "$pane" "$$" "$foreground"
     ;;
   *) exit 1 ;;
@@ -526,10 +535,58 @@ test_sweep_refuses_ambiguous_restored_claude_processes() {
     FM_TEST_HERDR_PANE_ID=w1:p1 FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
 
   assert_contains "$out" "skipped: existing endpoint has ambiguous agent process" \
-    "duplicate restored Claude processes should be reported as ambiguous"
+    "a top-level Claude process carrying both permission flags should be reported as ambiguous"
   [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "ambiguous restored Claude processes triggered lifecycle work"
-  pass "sweep: ambiguous restored Claude processes refuse every automatic recovery action"
+    || fail "an ambiguous restored Claude posture triggered lifecycle work"
+  pass "sweep: an ambiguous restored Claude posture refuses every automatic recovery action"
+}
+
+# A worker's own shell tool may run a nested claude CLI inside the pane's
+# foreground group. It is a descendant of the attributed worker, never the
+# worker, so the sweep leaves a conforming worker alone beside it and still
+# relaunches a genuinely drifted worker beside a conforming child.
+test_sweep_ignores_a_nested_claude_cli_under_a_conforming_worker() {
+  local w fb tmuxfb herdrfb root log spawn_log out
+  w=$(new_world sweep-claude-nested-cli)
+  add_sm_home "$w" sm1 lab:w1:p1 claude
+  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
+  printf 'claude\n' > "$w/home/config/secondmate-harness"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
+  root=$(make_control_probe_root "$w")
+  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
+
+  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
+    FM_ROOT_OVERRIDE="$root" FM_TEST_HERDR_CLAUDE_STATE=nested \
+    FM_TEST_HERDR_PANE_ID=w1:p1 FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
+
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "a conforming worker running a nested claude CLI must read as plainly alive"
+  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
+    || fail "a nested claude CLI under a conforming worker triggered lifecycle work: $(cat "$log" "$spawn_log")"
+  pass "sweep: a nested claude CLI under a conforming worker is never drift or ambiguity"
+}
+
+test_sweep_relaunches_top_level_drift_beside_a_nested_conforming_claude() {
+  local w fb tmuxfb herdrfb root log spawn_log out
+  w=$(new_world sweep-claude-drift-nested)
+  add_sm_home "$w" sm1 lab:w1:p1 claude
+  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
+  printf 'claude\n' > "$w/home/config/secondmate-harness"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
+  root=$(make_control_probe_root "$w")
+  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
+
+  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
+    FM_ROOT_OVERRIDE="$root" FM_TEST_HERDR_CLAUDE_STATE=drift-nested \
+    FM_TEST_HERDR_PANE_ID=w1:p1 FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
+
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "a successful relaunch of a drifted worker should stay silent by default"
+  [ "$(cat "$log")" = "sm1 relaunch" ] \
+    || fail "top-level drift beside a nested conforming claude CLI did not relaunch in place: $(cat "$log")"
+  [ ! -s "$spawn_log" ] \
+    || fail "top-level drift used the fresh-spawn path instead of preserving the exact endpoint and copy"
+  pass "sweep: genuine top-level drift still relaunches beside a nested conforming claude CLI"
 }
 
 # The expectation is the recorded launch, not the current file: editing
@@ -615,11 +672,64 @@ EOF
     FM_TEST_REMOTE_CALL_LOG="$remote_log" FM_TEST_SPAWN_LOG="$spawn_log" \
     "$root/bin/fm-bootstrap.sh" 2>&1)
   assert_contains "$out" "skipped: remote endpoint state is ambiguous on remote.test" \
-    "remote duplicate Claude processes should be reported as ambiguous"
+    "a remote ambiguous Claude posture should be reported as ambiguous"
   grep -F "fm-remote-secondmate-control.sh relaunch" "$remote_log" >/dev/null \
     && fail "remote ambiguity triggered a relaunch"
   [ ! -s "$spawn_log" ] || fail "remote ambiguity triggered a fresh spawn"
   pass "remote sweep: one drifted Claude relaunches in place while ambiguity refuses lifecycle work"
+}
+
+# The remote drift recovery hands the primary's explicit profile to the far
+# host exactly as a restart does, so it applies the same guards first: an
+# unrecognized effort token falls back to the default rather than reaching a
+# launch, and an Ultra pin that does not select native Codex through Pi is
+# refused before anything on the host is stopped.
+test_remote_sweep_drift_relaunch_validates_the_configured_effort() {
+  local w fb tmuxfb root remote_log spawn_log out
+  w=$(new_world sweep-remote-drift-effort)
+  add_sm_home "$w" sm1 remote:sm1 claude
+  cat >> "$w/home/state/sm1.meta" <<'EOF'
+remote_host=remote.test
+remote_root=/srv/firstmate
+remote_backend=herdr
+remote_target=fm-remote:w1:p1
+EOF
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
+  root=$(make_remote_control_probe_root "$w")
+  remote_log="$w/remote.log"; spawn_log="$w/spawn.log"
+
+  remote_drift_sweep() {
+    : > "$remote_log"; : > "$spawn_log"
+    PATH="$tmuxfb:$fb:$BASE_PATH" TMUX='' FM_BACKEND=tmux FM_HOME="$w/home" \
+      FM_ROOT_OVERRIDE="$root" FM_TEST_REMOTE_AGENT_STATE=permission-drift \
+      FM_TEST_REMOTE_CALL_LOG="$remote_log" FM_TEST_SPAWN_LOG="$spawn_log" \
+      "$root/bin/fm-bootstrap.sh" 2>&1
+  }
+
+  printf 'pi codex-native/gpt-6-astra ultra\n' > "$w/home/config/secondmate-harness"
+  out=$(remote_drift_sweep)
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "a native Ultra profile must relaunch silently"
+  assert_contains "$(cat "$remote_log")" \
+    "sm1 fm-remote-secondmate-control.sh relaunch sm1 pi codex-native/gpt-6-astra ultra" \
+    "the native Ultra profile was not passed through to the remote relaunch"
+
+  printf 'pi openai-codex/gpt-6-astra ultra\n' > "$w/home/config/secondmate-harness"
+  out=$(remote_drift_sweep)
+  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: skipped: relaunch refused after the live Claude process lacks the permission posture its launch recorded: the configured Ultra profile does not select native Codex through Pi (host=remote.test)" \
+    "an Ultra pin without native Codex must be refused with its reason"
+  grep -F "fm-remote-secondmate-control.sh relaunch" "$remote_log" >/dev/null \
+    && fail "an Ultra pin without native Codex still reached the remote relaunch"
+
+  printf 'claude default bogus\n' > "$w/home/config/secondmate-harness"
+  out=$(remote_drift_sweep)
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "an unrecognized effort token must fall back to the default silently"
+  assert_contains "$(cat "$remote_log")" \
+    "sm1 fm-remote-secondmate-control.sh relaunch sm1 claude default default" \
+    "an unrecognized effort token reached the remote relaunch instead of falling back to the default"
+  [ ! -s "$spawn_log" ] || fail "remote drift recovery used the local fresh-spawn path"
+  pass "remote sweep: drift recovery validates the configured effort before relaunching"
 }
 
 # The captain's documented remote recovery entry point is fm-spawn --secondmate,
@@ -835,9 +945,12 @@ test_sweep_respawns_confirmed_dead_secondmate
 test_sweep_leaves_alive_secondmate_untouched
 test_sweep_relaunches_restored_claude_permission_drift_in_place
 test_sweep_refuses_ambiguous_restored_claude_processes
+test_sweep_ignores_a_nested_claude_cli_under_a_conforming_worker
+test_sweep_relaunches_top_level_drift_beside_a_nested_conforming_claude
 test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit
 test_sweep_needs_a_recorded_posture_before_calling_drift
 test_remote_sweep_relaunches_drift_and_refuses_ambiguity
+test_remote_sweep_drift_relaunch_validates_the_configured_effort
 test_remote_launch_recovers_permission_drift_and_still_refuses_ambiguity
 test_sweep_respawns_authoritatively_missing_pi_secondmate
 test_sweep_respawns_authoritatively_missing_pi_signed_secondmate

@@ -426,13 +426,21 @@ test_recovery_grade_read_widens_only_at_its_own_boundary() {
 
 # --- restored Claude permission posture -------------------------------------
 
-claude_permission_state_case() {  # <mode> <foreground-json> [with-policy]
-  local mode=$1 foreground=$2 with_policy=${3:-yes}
+# The pane shell is pid 4242 and its foreground job, the top-level worker
+# every fixture anchors posture attribution on, is 4243 unless a case names
+# another leader pid; `none` omits the foreground process group id entirely.
+claude_permission_state_case() {  # <mode> <foreground-json> [with-policy] [leader-pid|none]
+  local mode=$1 foreground=$2 with_policy=${3:-yes} leader=${4:-4243}
   FM_TEST_FOREGROUND="$foreground" FM_TEST_MODE="$mode" FM_TEST_WITH_POLICY="$with_policy" \
+    FM_TEST_LEADER="$leader" \
     bash -c '. "$0/bin/backends/herdr.sh"
       fm_backend_herdr_pane_agent_state() { printf live; }
       fm_backend_herdr_cli() {
-        printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"foreground_processes\":%s}}}\n" "$FM_TEST_FOREGROUND"
+        if [ "$FM_TEST_LEADER" = none ]; then
+          printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"shell_pid\":4242,\"foreground_processes\":%s}}}\n" "$FM_TEST_FOREGROUND"
+        else
+          printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"shell_pid\":4242,\"foreground_process_group_id\":%s,\"foreground_processes\":%s}}}\n" "$FM_TEST_LEADER" "$FM_TEST_FOREGROUND"
+        fi
       }
       if [ "$FM_TEST_WITH_POLICY" = yes ]; then
         fm_backend_herdr_agent_state fmtest:w1:p2 claude "$FM_TEST_MODE"
@@ -442,28 +450,26 @@ claude_permission_state_case() {  # <mode> <foreground-json> [with-policy]
 }
 
 test_restored_claude_permission_posture_is_recovery_grade() {
-  local bypass auto auto_equals restored conflicting malformed duplicate tool prompt_mentions_flag generic
+  local bypass auto auto_equals restored conflicting malformed tool prompt_mentions_flag generic
   local unnamed_restored unnamed_conforming
   bypass=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
   auto=$(claude_permission_state_case auto \
-    '[{"name":"node","argv0":"claude","argv":["claude","--permission-mode","auto"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--permission-mode","auto"]}]')
   auto_equals=$(claude_permission_state_case auto \
-    '[{"name":"node","argv0":"claude","argv":["claude","--permission-mode=auto"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--permission-mode=auto"]}]')
   restored=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
   conflicting=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]}]')
   malformed=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":"claude --dangerously-skip-permissions"}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":"claude --dangerously-skip-permissions"}]')
   prompt_mentions_flag=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","prompt text mentions --dangerously-skip-permissions"]}]')
-  duplicate=$(claude_permission_state_case bypass \
-    '[{"name":"claude","argv":["claude","--resume","session-123"]},{"name":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123","prompt text mentions --dangerously-skip-permissions"]}]')
   tool=$(claude_permission_state_case bypass \
-    '[{"name":"git","argv0":"git","argv":["git","status"]}]')
+    '[{"pid":4243,"name":"git","argv0":"git","argv":["git","status"]}]')
   generic=$(claude_permission_state_case bypass \
-    '[{"name":"claude","argv":["claude","--resume","session-123"]}]' no)
+    '[{"pid":4243,"name":"claude","argv":["claude","--resume","session-123"]}]' no)
   # A foreground entry carrying no `name` at all: the projected row's middle
   # column is empty, and a splitter that drops empty fields shifts argv0 and
   # the argv-shape column one place left, so a genuine restored worker reads
@@ -488,13 +494,53 @@ test_restored_claude_permission_posture_is_recovery_grade() {
     || fail "a flattened argv string is an unreadable posture that must not degrade a proven-live endpoint, got '$malformed'"
   [ "$prompt_mentions_flag" = permission-drift ] \
     || fail "a flag mentioned only inside prompt text must not satisfy exact argv, got '$prompt_mentions_flag'"
-  [ "$duplicate" = ambiguous ] \
-    || fail "multiple foreground Claude processes must be ambiguous, got '$duplicate'"
   [ "$tool" = alive ] \
-    || fail "a temporary foreground tool must preserve the registered live verdict, got '$tool'"
+    || fail "a non-Claude top-level process must preserve the registered live verdict, got '$tool'"
   [ "$generic" = alive ] \
     || fail "callers without task policy must retain generic process liveness, got '$generic'"
-  pass "Herdr recovery state detects restored Claude permission drift, refuses ambiguity, and keeps a live endpoint alive across an unreadable argv"
+  pass "Herdr recovery state detects restored Claude permission drift, refuses a conflicting posture, and keeps a live endpoint alive across an unreadable argv"
+}
+
+# Attribution is anchored on the pane's top-level worker: the foreground
+# process group leader that the launch, or Herdr's restoration of it, started.
+# A worker's own shell tool can run `claude -p`, `claude --version`, or any
+# other claude CLI as a child in that same group. Before this anchor, such a
+# child turned a conforming worker into an ambiguous pair - refusing every
+# lifecycle action while the drift check stayed blind - and a child without
+# the flag read as the worker's drift. Neither is the worker: only the
+# leader's exact argv is judged, and a genuine top-level drift is still found
+# beside a conforming nested child.
+test_posture_attribution_anchors_on_the_top_level_worker() {
+  local nested_drifted_child nested_conflicting_child nested_restored_worker leader_conflicting leader_gone
+  local conforming='{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}'
+  local restored='{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}'
+  nested_drifted_child=$(claude_permission_state_case bypass \
+    "[$conforming,{\"pid\":4244,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"-p\",\"summarize the diff\"]}]")
+  nested_conflicting_child=$(claude_permission_state_case bypass \
+    "[$conforming,{\"pid\":4244,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--dangerously-skip-permissions\",\"--permission-mode\",\"auto\"]}]")
+  # Herdr restored the worker without its flag while a nested claude CLI it
+  # runs happens to carry it: the top-level drift is genuine and must not hide
+  # behind the child, whichever order the snapshot lists them in.
+  nested_restored_worker=$(claude_permission_state_case bypass \
+    "[{\"pid\":4244,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--dangerously-skip-permissions\",\"--version\"]},$restored]")
+  leader_conflicting=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]},{"pid":4244,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  # The leader is gone from its group (a worker mid-exit) and only a nested
+  # claude remains: nothing attributable is left, never a drifted worker.
+  leader_gone=$(claude_permission_state_case bypass \
+    '[{"pid":4244,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
+
+  [ "$nested_drifted_child" = alive ] \
+    || fail "a nested claude CLI without the flag under a conforming worker must not read as drift or ambiguity, got '$nested_drifted_child'"
+  [ "$nested_conflicting_child" = alive ] \
+    || fail "a nested claude CLI carrying both flags under a conforming worker must not read as ambiguous, got '$nested_conflicting_child'"
+  [ "$nested_restored_worker" = permission-drift ] \
+    || fail "a genuine top-level drift must be found beside a conforming nested claude CLI, got '$nested_restored_worker'"
+  [ "$leader_conflicting" = ambiguous ] \
+    || fail "the top-level worker carrying both flags is ambiguous whatever its children carry, got '$leader_conflicting'"
+  [ "$leader_gone" = alive ] \
+    || fail "a nested claude CLI with no top-level worker left in the group must be unobserved, got '$leader_gone'"
+  pass "Herdr posture attribution anchors on the top-level worker: a nested claude CLI is never the worker and top-level drift still reads"
 }
 
 # The posture read is judged against the mode the caller passes, which is the
@@ -503,11 +549,11 @@ test_restored_claude_permission_posture_is_recovery_grade() {
 # current config says. A failed or foreign-pane process read is unreadable
 # and, like an absent argv, never degrades the proven live verdict.
 test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive() {
-  local auto_resume bypass_resume failed_read foreign_pane
+  local auto_resume bypass_resume failed_read foreign_pane no_group_id duplicate_leader
   auto_resume=$(claude_permission_state_case auto \
-    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
   bypass_resume=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
   failed_read=$(FM_TEST_MODE=bypass bash -c '. "$0/bin/backends/herdr.sh"
       fm_backend_herdr_pane_agent_state() { printf live; }
       fm_backend_herdr_cli() { return 1; }
@@ -515,9 +561,16 @@ test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive() {
   foreign_pane=$(FM_TEST_MODE=bypass bash -c '. "$0/bin/backends/herdr.sh"
       fm_backend_herdr_pane_agent_state() { printf live; }
       fm_backend_herdr_cli() {
-        printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w9:p9\",\"foreground_processes\":[{\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"x\"]}]}}}\n"
+        printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w9:p9\",\"shell_pid\":4242,\"foreground_process_group_id\":4243,\"foreground_processes\":[{\"pid\":4243,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"x\"]}]}}}\n"
       }
       fm_backend_herdr_agent_state fmtest:w1:p2 claude "$FM_TEST_MODE"' "$ROOT")
+  # A snapshot that cannot name the pane's foreground job cannot anchor the
+  # attribution, and one that lists the anchor pid twice contradicts itself:
+  # both are unreadable, never drift, so a restored-looking argv stays alive.
+  no_group_id=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]' yes none)
+  duplicate_leader=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]},{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
 
   [ "$auto_resume" = alive ] \
     || fail "a resumed process carrying the recorded auto posture must be alive, got '$auto_resume'"
@@ -527,6 +580,10 @@ test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive() {
     || fail "a failed posture read must not downgrade a proven-live endpoint, got '$failed_read'"
   [ "$foreign_pane" = alive ] \
     || fail "a process read describing another pane must not downgrade a proven-live endpoint, got '$foreign_pane'"
+  [ "$no_group_id" = alive ] \
+    || fail "a snapshot without a foreground process group id cannot anchor attribution and must stay alive, got '$no_group_id'"
+  [ "$duplicate_leader" = alive ] \
+    || fail "a snapshot listing the anchor pid twice is unreadable and must stay alive, got '$duplicate_leader'"
   pass "Herdr posture is judged against the recorded launch mode and an unreadable read never degrades liveness"
 }
 
@@ -543,7 +600,7 @@ test_policy_read_reuses_the_liveness_process_snapshot() {
         case "$2 $3" in
           "pane get") printf "{\"result\":{\"pane\":{\"pane_id\":\"w1:p2\"}}}\n" ;;
           "agent get") printf "{\"result\":{\"agent\":{\"agent\":\"claude\",\"agent_status\":\"idle\"}}}\n" ;;
-          "pane process-info") printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"shell_pid\":4242,\"foreground_processes\":[{\"pid\":4243,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"session-123\"]}]}}}\n" ;;
+          "pane process-info") printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"shell_pid\":4242,\"foreground_process_group_id\":4243,\"foreground_processes\":[{\"pid\":4243,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"session-123\"]}]}}}\n" ;;
           *) return 1 ;;
         esac
       }
@@ -565,21 +622,21 @@ test_policy_read_reuses_the_liveness_process_snapshot() {
 test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
   local script_alone script_beside_agent helper_alone helper_beside_agent helper_beside_restored wrapper_alone argv_absent argv_absent_only
   script_alone=$(claude_permission_state_case bypass \
-    '[{"name":"bash","argv0":"/repo/bin/fm-claude-trust.sh","argv":["/repo/bin/fm-claude-trust.sh"]}]')
+    '[{"pid":4243,"name":"bash","argv0":"/repo/bin/fm-claude-trust.sh","argv":["/repo/bin/fm-claude-trust.sh"]}]')
   script_beside_agent=$(claude_permission_state_case bypass \
-    '[{"name":"bash","argv0":"/repo/tests/fm-claude-trust.test.sh","argv":["/repo/tests/fm-claude-trust.test.sh"]},{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+    '[{"pid":4244,"name":"bash","argv0":"/repo/tests/fm-claude-trust.test.sh","argv":["/repo/tests/fm-claude-trust.test.sh"]},{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
   helper_alone=$(claude_permission_state_case bypass \
-    '[{"name":"claude-usage","argv0":"/usr/local/bin/claude-usage","argv":["claude-usage","--resume","x"]}]')
+    '[{"pid":4243,"name":"claude-usage","argv0":"/usr/local/bin/claude-usage","argv":["claude-usage","--resume","x"]}]')
   helper_beside_agent=$(claude_permission_state_case bypass \
-    '[{"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+    '[{"pid":4244,"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
   helper_beside_restored=$(claude_permission_state_case bypass \
-    '[{"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
+    '[{"pid":4244,"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"pid":4243,"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
   wrapper_alone=$(claude_permission_state_case bypass \
-    '[{"name":"bash","argv0":"/opt/tools/claude-wrapper","argv":["/opt/tools/claude-wrapper","--resume","x"]}]')
+    '[{"pid":4243,"name":"bash","argv0":"/opt/tools/claude-wrapper","argv":["/opt/tools/claude-wrapper","--resume","x"]}]')
   argv_absent=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude"}]')
+    '[{"pid":4243,"name":"node","argv0":"claude"}]')
   argv_absent_only=$(claude_permission_state_case bypass \
-    '[{"name":"node","argv0":"claude","argv":null}]')
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":null}]')
 
   [ "$script_alone" = alive ] \
     || fail "a claude-named script must not be attributed as the worker, got '$script_alone'"
@@ -5397,6 +5454,7 @@ test_cli_helper_sets_env_and_appends_trailing_session_flag
 test_agent_state_bypasses_a_stale_client_shadowing_a_compatible_one
 test_recovery_grade_read_widens_only_at_its_own_boundary
 test_restored_claude_permission_posture_is_recovery_grade
+test_posture_attribution_anchors_on_the_top_level_worker
 test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive
 test_policy_read_reuses_the_liveness_process_snapshot
 test_claude_attribution_needs_exact_identity_and_never_degrades_liveness

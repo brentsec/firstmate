@@ -867,7 +867,7 @@ for meta in "$STATE"/*.meta; do
         printf 'endpoint: permission-drift (Claude process lacks the %s permission posture its launch recorded; relaunch in place; backend=%s window=%s)\n' "$posture_mode" "$backend" "$window"
         ;;
       ambiguous)
-        printf 'endpoint: ambiguous (more than one foreground Claude process, or one carrying both permission flags; reconcile the endpoint before any lifecycle action; backend=%s window=%s)\n' "$backend" "$window"
+        printf 'endpoint: ambiguous (the top-level Claude process carries both permission flags; reconcile the endpoint before any lifecycle action; backend=%s window=%s)\n' "$backend" "$window"
         ;;
     esac
   else

@@ -805,6 +805,20 @@ secondmate_liveness_one() {  # <meta> <id>
         [ -n "$remote_harness" ] || remote_harness=$harness
         remote_model=$("$SCRIPT_DIR/fm-harness.sh" secondmate-model 2>/dev/null || true)
         remote_effort=$("$SCRIPT_DIR/fm-harness.sh" secondmate-effort 2>/dev/null || true)
+        # The same profile guards bin/fm-secondmate-restart.sh applies before a
+        # remote relaunch: an unrecognized effort token falls back to the
+        # default instead of being handed to a launch, and an Ultra pin is
+        # refused here, before anything on the host is stopped, unless the
+        # profile selects native Codex through Pi.
+        case "$remote_effort" in
+          ''|low|medium|high|xhigh|max|ultra) ;;
+          *) remote_effort="" ;;
+        esac
+        if [ "$remote_effort" = ultra ] \
+          && ! "$SCRIPT_DIR/fm-harness.sh" validate-native-effort "$remote_harness" "$remote_model" "$remote_effort" 2>/dev/null; then
+          echo "SECONDMATE_LIVENESS: secondmate $id: skipped: relaunch refused after $cause: the configured Ultra profile does not select native Codex through Pi (host=$remote_host)"
+          return 0
+        fi
         if out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-on.sh" "$id" \
           fm-remote-secondmate-control.sh relaunch "$id" "$remote_harness" \
           "${remote_model:-default}" "${remote_effort:-default}" < /dev/null 2>&1); then

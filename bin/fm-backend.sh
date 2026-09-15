@@ -884,9 +884,9 @@ fm_backend_target_exists() {  # <backend> <target> [expected-label]
 #                      (claude_permission_mode= in the task record).
 #   dead             - the endpoint exists but confidently has no agent.
 #   missing          - the recorded endpoint is authoritatively absent.
-#   ambiguous        - the endpoint exists but its process cannot be attributed:
-#                      more than one foreground Claude process, or one process
-#                      carrying both permission flags.
+#   ambiguous        - the endpoint exists but its agent cannot be decided: the
+#                      backend could not attribute its process, or the one
+#                      attributed Claude process carries both permission flags.
 #   unreadable       - a target or inventory read failed or contradicted itself.
 #   unverified       - this backend has no recovery classifier.
 # Only `dead` and `missing` license a fresh spawn. `permission-drift` licenses
@@ -896,10 +896,12 @@ fm_backend_target_exists() {  # <backend> <target> [expected-label]
 # bin/fm-agent-process-lib.sh, never from a registration or a rendered title
 # alone. The optional expected-harness and Claude-mode arguments add exact
 # invocation conformance on backends that expose argv boundaries, read from
-# the same process snapshot as the liveness verdict; a posture read that fails,
-# describes another pane, or reports no argv is an observability gap that keeps
-# a proven-live endpoint alive rather than degrading it. Callers that have no
-# task metadata retain the historical process-liveness view.
+# the same process snapshot as the liveness verdict and judged on the pane's
+# top-level worker only, never on a nested `claude` CLI the worker itself
+# runs; a posture read that fails, describes another pane, or reports no argv
+# is an observability gap that keeps a proven-live endpoint alive rather than
+# degrading it. Callers that have no task metadata retain the historical
+# process-liveness view.
 #
 # The tmux adapter requires a successful session inventory and returns
 # `missing` only when it omits the exact window. The Herdr adapter reuses its
@@ -976,15 +978,15 @@ fm_backend_claude_permission_posture_for_meta() {  # <meta-file>
   fm_backend_herdr_claude_permission_state "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" "$mode"
 }
 
-# Backward-compatible three-state view for existing callers. A process with
-# permission drift is still alive for duplicate prevention; it is not a valid
-# worker posture, and policy-aware callers use the detailed state above to
-# replace it safely. An authoritatively missing endpoint is confidently not a
-# live agent, while every ambiguous, unreadable, or unverified result stays
-# unknown.
+# Three-state view for callers that only need a yes/no agent verdict. It makes
+# the generic liveness read, which never judges a permission posture, so a
+# drifted worker is simply alive here and no fresh spawn can join it; policy-
+# aware callers use the detailed state above to replace one safely. An
+# authoritatively missing endpoint is confidently not a live agent, while every
+# ambiguous, unreadable, or unverified result stays unknown.
 fm_backend_agent_alive() {  # <backend> <target>
   case "$(fm_backend_agent_state "$1" "$2")" in
-    alive|permission-drift) printf 'alive' ;;
+    alive) printf 'alive' ;;
     dead|missing) printf 'dead' ;;
     *) printf 'unknown' ;;
   esac

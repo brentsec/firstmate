@@ -36,7 +36,7 @@ A recorded `harness=` is not always an exact adapter name: a task launched from 
 
 An exit that delivers lifecycle input but cannot prove the agent stopped fails with `exit=unconfirmed`, reports the observed agent state and any interrupt cancellation claim, and never claims that nothing changed.
 A policy-aware `permission-drift` state is one attributed live Claude process whose exact argv lacks the permission posture the task's own launch recorded.
-It is alive for duplicate prevention, but `relaunch` may transactionally stop and replace it in the same endpoint and worktree; an ambiguous multi-Claude process set still refuses without sending any lifecycle input.
+It is alive for duplicate prevention, but `relaunch` may transactionally stop and replace it in the same endpoint and worktree; a top-level Claude process carrying both permission flags is ambiguous and still refuses without sending any lifecycle input, while a nested `claude` command the worker itself runs is never attributed at all.
 Interrupt never rewrites busy state as proof of its own success.
 Claude exposes no lifecycle acknowledgement for a manual interrupt, so delivery succeeds with `cancel=unconfirmed` and its adapter-owned busy state remains as observed.
 muse's session log records `terminal=cancelled` for the interrupted run, so the control plane reports `cancel=confirmed` only after observing that exact acknowledgement.

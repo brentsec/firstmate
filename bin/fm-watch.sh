@@ -407,8 +407,8 @@ window_key() {  # <window>
 # drift, and a record without one is not checked. Run before the ordinary
 # secondmate idle exemption, so an idle restored mate cannot mask the drift
 # indefinitely. One exact process is routed through ordinary stuck-worker
-# recovery; an ambiguous attribution (more than one foreground Claude process,
-# or one carrying both flags) is reported and never acted on automatically. A
+# recovery; an ambiguous posture (the pane's top-level Claude process carrying
+# both flags) is reported and never acted on automatically. A
 # generation-and-mode signature suppresses repeats of the same finding and is
 # cleared by a `conforming` bounded posture read, and by a dead-or-missing
 # verdict only in the narrow case where the endpoint vanishes between the
@@ -451,7 +451,7 @@ claude_permission_posture_check() {  # <window> <task> <marker-key>
       reason="stale: $w (the live Claude process lacks the $mode permission posture its launch recorded; relaunch the worker safely in its recorded endpoint and local copy)"
       ;;
     ambiguous)
-      reason="stale: $w (Claude process attribution is ambiguous: more than one foreground Claude process, or one process carrying both permission flags; refuse automatic recovery and reconcile the endpoint before any lifecycle action)"
+      reason="stale: $w (Claude permission posture is ambiguous: the top-level Claude process carries both permission flags; refuse automatic recovery and reconcile the endpoint before any lifecycle action)"
       ;;
     dead|missing)
       rm -f "$marker"

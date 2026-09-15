@@ -21,7 +21,7 @@ Herdr's native agent restoration synthesizes `claude --resume <session-id>` and 
 The policy-aware Herdr recovery state checks the exact foreground argv against the permission mode the task's own launch recorded in its `state/<id>.meta` (`claude_permission_mode=`), never against the current home's mutable configuration, so a configuration edit changes only the next launch.
 One attributed Claude process missing that recorded flag reads `permission-drift` and must be replaced through `FM_HOME=<active-home> bin/fm-control.sh <task-id> relaunch --note '<progress>'`, which preserves the endpoint, local copy, and unfinished work while `bin/fm-spawn.sh` reapplies the flag and records the mode it launched with.
 A secondmate needs no note and its startup recovery uses that same control plane automatically.
-More than one foreground Claude process, or one process carrying both permission flags, is ambiguous and refuses recovery; reconcile ownership without typing or launching anything.
+The posture is read from the pane's top-level Claude process only, so a nested `claude` command the worker runs from its own shell tool is never attributed; that one process carrying both permission flags is ambiguous and refuses recovery, so reconcile ownership without typing or launching anything.
 A record without a recorded mode, a failed or malformed process read, or a build that reports no argv is not drift evidence and leaves the endpoint's proven live state untouched.
 A temporary non-Claude foreground tool is not drift, and a flattened command line or pane footer is not flag evidence because the worker prompt may contain the same text.
 

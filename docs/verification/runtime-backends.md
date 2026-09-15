@@ -1273,7 +1273,7 @@ After the guarded server stop and restart, Herdr restored the same pane as `clau
 No input or permission toggle was sent between those observations.
 Stopping that restored process and adding only `--dangerously-skip-permissions` to the same resume command returned the footer to bypass mode, so Claude session persistence itself is not enough to cause the drift.
 The public state reader then detected a second native restoration instead of trusting process existence, and the public relaunch reused the exact recorded endpoint and isolated copy while returning the worker to visible bypass mode without human input.
-The portable regressions require exact argv arrays, reject flattened prompt text as flag evidence, and refuse multiple foreground Claude candidates rather than stopping either one.
+The portable regressions require exact argv arrays, reject flattened prompt text as flag evidence, attribute only the pane's top-level worker so that a nested `claude` command the worker runs is neither drift nor ambiguity, and refuse one top-level process carrying both permission flags rather than stopping it.
 
 Every Firstmate-owned initial, same-task, local recovery, and remote secondmate relaunch still reaches the same launch template in `bin/fm-spawn.sh`; the restoration-specific reconciliation changes only the Herdr Claude path.
 Tmux performs no native agent restoration through Firstmate and remains covered by the same launch-template and relaunch regressions.

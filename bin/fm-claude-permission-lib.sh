@@ -83,7 +83,12 @@ fm_claude_permission_flag() {  # <bypass|auto>
 # shape Pi presents - docs/verification/runtime-backends.md "Stale agent
 # registration"); no versioned or prefixed launcher name has been observed, so
 # none is accepted. A name this rejects attributes no process at all, which is
-# `unobserved` - the fail-safe direction, never drift.
+# `unobserved` - the fail-safe direction, never drift. Identity alone never
+# attributes a process either: the Herdr adapter applies this test only to the
+# pane's top-level worker, the foreground process group leader its launch or
+# restoration started, so a `claude` CLI that worker runs from its own shell
+# tool is a descendant, never the worker (bin/backends/herdr.sh
+# fm_backend_herdr_claude_permission_state).
 fm_claude_process_matches() {  # <name> <argv0>
   local name=${1:-} argv0=${2:-} base
   for base in "$name" "$argv0"; do

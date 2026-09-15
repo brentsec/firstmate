@@ -1395,7 +1395,7 @@ case "\$sub" in
   get) [ "\$pane" = "$live" ] && exit 0; exit 1 ;;
   process-info)
     [ "\$pane" = "$live" ] || exit 1
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[{"pid":4243,"name":"node","argv0":"claude","argv":$argv}]}}}\\n' "$live"
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_process_group_id":4243,"foreground_processes":[{"pid":4243,"name":"node","argv0":"claude","argv":$argv}]}}}\\n' "$live"
     exit 0 ;;
 esac
 exit 1

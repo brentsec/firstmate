@@ -157,7 +157,8 @@ case "${1:-}" in
         # The process-level view a registration is verified against (#4115):
         # `agent` puts a conforming live claude in the foreground, `restored`
         # puts Herdr's native claude --resume shape there without Firstmate's
-        # permission flag, `duplicate` reports two Claude processes, `shell` a
+        # permission flag, `nested` puts a conforming worker there with a
+        # claude --resume child it runs itself (never the worker), `shell` a
         # bare zsh whose pid is the test script itself (a real, long-lived
         # process with no harness descendant, so the adapter's real
         # process-table walk finds it), and anything else answers nothing.
@@ -165,7 +166,7 @@ case "${1:-}" in
         case "${FM_FAKE_HERDR_PROCESS:-agent}" in
           agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           restored) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
-          duplicate) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]},{"pid":424243,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          nested) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]},{"pid":424243,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           shell) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":%s,"foreground_processes":[{"pid":%s,"name":"zsh","argv0":"zsh","argv":["-zsh"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
         esac
         exit 0 ;;
@@ -1496,6 +1497,36 @@ test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live() {
   pass "fm-crew-state needs a recorded launch posture before it calls a live Claude drifted"
 }
 
+# A nested claude CLI the worker runs from its own shell tool sits in the
+# pane's foreground group beside the worker. It is never the worker, so a
+# conforming top-level process keeps its ordinary reading whatever the child's
+# argv says.
+test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live() {
+  command -v jq >/dev/null 2>&1 || { pass "Herdr nested-Claude posture test skipped without jq"; return; }
+  reset_fakes
+  local d; d=$(new_case herdr-nested-claude)
+  make_repo_on_branch "$d/wt" fm/feat-herdr-nested
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-herdr-nested.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
+  printf 'working: implementing\n' > "$d/state/feat-herdr-nested.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_TMUX_MISSING=1
+  FM_FAKE_HERDR_AGENT_STATUS=idle
+  FM_FAKE_HERDR_BUSY=0
+  FM_FAKE_HERDR_PROCESS=nested
+  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-nested)
+  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-nested idle --gen "$gen" \
+    --source claude-hook --event stop
+  local out; out=$(run_crew_state "$d" feat-herdr-nested)
+  assert_not_contains "$out" "permission posture" \
+    "a nested claude CLI under a conforming worker must not be read as the worker's posture"
+  assert_contains "$out" "source: status-log" \
+    "a conforming worker running a nested claude CLI must keep its ordinary reading"
+  pass "fm-crew-state never attributes a nested claude CLI as the worker"
+}
+
 test_no_run_herdr_unknown_uses_backend_capture() {
   command -v jq >/dev/null 2>&1 || { pass "herdr pane fallback skipped without jq"; return; }
   reset_fakes
@@ -2586,6 +2617,7 @@ test_no_run_footer_text_alone_is_not_working
 test_no_run_grok_uses_isolated_fallback
 test_no_run_herdr_restored_claude_without_bypass_is_not_alive
 test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live
+test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
 test_no_run_herdr_alive_with_failed_read_stays_live

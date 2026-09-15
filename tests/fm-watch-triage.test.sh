@@ -244,8 +244,8 @@ test_claude_permission_drift_wake_dedupes_and_rearms() {
     || fail "only a suspicious posture may pay the recovery-grade classification, got $count of 7 polls"
   [ "$(grep -c 'lacks the bypass permission posture its launch recorded' "$log")" = 2 ] \
     || fail "permission drift did not re-arm exactly once after a conforming observation"
-  assert_contains "$(tail -1 "$log")" "more than one foreground Claude process, or one process carrying both permission flags" \
-    "ambiguous attribution did not surface its refusal reason"
+  assert_contains "$(tail -1 "$log")" "the top-level Claude process carries both permission flags" \
+    "an ambiguous posture did not surface its refusal reason"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   assert_contains "$(cat "$state/.claude-permission-$key")" ":bypass:ambiguous" \
     "the watcher did not retain the current ambiguous episode signature"
