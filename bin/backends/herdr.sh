@@ -2232,7 +2232,7 @@ EOF
 # the single attributed process's argv.
 fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto>
   local session=$1 pane_id=$2 mode=$3 info rows first=1
-  local idx name argv0 argv_state argv matches=0 matched_index= matched_state=
+  local idx name argv0 argv_state argv matches=0 matched_index='' matched_state=''
   case "$mode" in bypass|auto) ;; *) printf 'unreadable'; return 0 ;; esac
   command -v jq >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
   if ! command -v fm_claude_process_matches >/dev/null 2>&1; then

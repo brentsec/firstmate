@@ -1143,7 +1143,7 @@ test_spawn_autodetect_nesting_resolves_tmux_silently() {
 # is likewise scoped to the backend that owns the classifier.
 for_meta_dispatch() {  # <meta> <config-dir> -> the arguments the classifier received
   (
-    # shellcheck disable=SC2317
+    # shellcheck disable=SC2317,SC2329 # Invoked indirectly by fm_backend_agent_state_for_meta.
     fm_backend_agent_state() { printf 'args=%s' "$*"; }
     fm_backend_agent_state_for_meta "$1" "$2" 2>/dev/null
   )
