@@ -230,11 +230,15 @@ harness_process_verdict() {  # <pid>
     agy) echo "comm agy"; return ;;
     node|nodejs|node[0-9]*|node-[0-9]*|python*)
       # Bare interpreter: match the harness name in its script path. Node is
-      # matched as an interpreter NAME - the bare name or a versioned one
-      # (node20, node-22), exactly the identities bin/fm-gemini-lib.sh and
-      # bin/fm-cursor-lib.sh accept - never as a `node-*` prefix, so its
-      # node-MainThread worker name cannot make arbitrary Node arguments into
-      # harness identity evidence.
+      # matched as an interpreter NAME - the bare name, the packaged `nodejs`
+      # name, or a versioned one (node20, node-22) - never as an open `node-*`
+      # prefix, so an arbitrarily renamed Node thread cannot turn any Node
+      # argument list into harness identity evidence. This is deliberately
+      # narrower than bin/fm-gemini-lib.sh and bin/fm-cursor-lib.sh, which
+      # additionally accept `node-*` with any suffix and the bare `MainThread`
+      # name modern Node gives its main thread: those two can afford it because
+      # they confirm a Gemini or Cursor script path on top of the name, while
+      # this arm's verdict rests on a substring of argv alone.
       args=$(ps -o args= -p "$pid" 2>/dev/null)
       if fm_gemini_args_are_gemini "$args"; then
         echo "args gemini"

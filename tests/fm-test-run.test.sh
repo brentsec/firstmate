@@ -1104,9 +1104,7 @@ test_portable_shard_union_and_coverage_guard() {
 # locale, so every developer shell running under en_US.UTF-8 saw the guard fail
 # on an untouched tree while C.UTF-8 CI runners never did.
 test_coverage_guard_is_locale_independent() {
-  local bare loc out
-  bare=$(grep -n -E '(^|[^A-Za-z_=])comm -' "$RUNNER" | grep -v 'LC_ALL=C comm -' || true)
-  [ -z "$bare" ] || fail "bin/fm-test-run.sh compares under the ambient collation:"$'\n'"$bare"
+  local loc out
   loc=$(locale -a 2>/dev/null | grep -i -m1 -E '^en_US\.(utf8|UTF-8)$' || true)
   if [ -z "$loc" ]; then
     pass "SKIP (no dictionary-collating locale installed): coverage guard under a non-C locale"

@@ -781,12 +781,15 @@ fi
 # verdict reports unknown rather than trusting a possibly-stale status log as
 # the current state. A live Claude process is also checked against the
 # permission posture its own launch recorded: process existence cannot mask a
-# lost unattended flag, while a record with no recorded posture, or a posture
-# read that could not be made, keeps the ordinary live reading.
+# lost unattended flag. Only a record that carries such a posture is worth that
+# recovery-grade read, so a record without one makes no extra backend call at
+# all, and a posture read that could not be made keeps the ordinary live
+# reading.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
 AGENT_STATE=none
-case "$TASK_BACKEND:$HARNESS" in
-  herdr:claude*)
+CLAUDE_MODE=$(fm_backend_meta_exact_value "$META" claude_permission_mode 2>/dev/null || true)
+case "$TASK_BACKEND:$HARNESS:$CLAUDE_MODE" in
+  herdr:claude*:bypass|herdr:claude*:auto)
     AGENT_STATE=$(fm_backend_agent_state_for_meta "$META")
     case "$AGENT_STATE" in
       permission-drift)
