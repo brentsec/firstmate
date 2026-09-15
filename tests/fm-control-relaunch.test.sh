@@ -354,6 +354,7 @@ test_relaunch_refuses_ambiguous_restored_claude_duplicates() {
     printf '%s\n' 'herdr_workspace_id=w1'
     printf '%s\n' 'herdr_tab_id=w1:t1'
     printf '%s\n' 'herdr_pane_id=w1:p2'
+    printf '%s\n' 'claude_permission_mode=bypass'
   } > "$dir/home/state/rl44.meta"
   make_herdr_duplicate_stub "$dir"
   before_meta=$(cat "$dir/home/state/rl44.meta")
@@ -401,6 +402,8 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
     "the replacement Claude must explicitly reapply bypass permissions"
   assert_not_contains "$(cat "$dir/fake/literal")" "claude --permission-mode auto" \
     "the default relaunch must not silently change permission posture"
+  [ "$(meta_field "$dir" rl1 claude_permission_mode)" = bypass ] \
+    || fail "the relaunch must record the bypass posture it launched with, got '$(meta_field "$dir" rl1 claude_permission_mode)'"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
 }
 
@@ -460,7 +463,9 @@ test_same_harness_relaunch_reapplies_configured_auto_permissions() {
     || fail "the configured-auto relaunch must preserve its endpoint"
   [ "$(meta_field "$dir" rl43 worktree)" = "$dir/wt" ] \
     || fail "the configured-auto relaunch must preserve its isolated copy"
-  pass "fm-control relaunch reapplies the selected Claude permission mode in the same endpoint and copy"
+  [ "$(meta_field "$dir" rl43 claude_permission_mode)" = auto ] \
+    || fail "the relaunch must record the auto posture it launched with, got '$(meta_field "$dir" rl43 claude_permission_mode)'"
+  pass "fm-control relaunch reapplies the selected Claude permission mode in the same endpoint and copy and records it"
 }
 
 test_relaunch_from_linked_home_preserves_recorded_worktree() {

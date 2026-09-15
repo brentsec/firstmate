@@ -181,50 +181,81 @@ reap() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
 size_of() { LC_ALL=C wc -c < "$1" | tr -d '[:space:]'; }
 
 # Herdr-native restoration can leave a registered Claude process alive with a
-# synthesized `claude --resume` argv that omitted Firstmate's unattended flag.
-# Exercise the watcher's public source interface directly so the test controls
-# only the backend verdict: the first drift must wake, the identical finding is
-# deduplicated, a conforming observation clears that episode, and duplicate
-# Claude processes surface as ambiguity rather than authorizing lifecycle work.
+# synthesized `claude --resume` argv that omitted the permission posture the
+# task's launch recorded. Exercise the watcher's public source interface
+# directly so the test controls only the backend verdict: the first drift must
+# wake, the identical finding is deduplicated, an `unobserved` poll (a tool
+# briefly holding the pane) keeps the marker so the same unfixed drift does not
+# re-wake at every tool boundary, only a `conforming` observation clears that
+# episode, and an ambiguous attribution surfaces as ambiguity rather than
+# authorizing lifecycle work.
 test_claude_permission_drift_wake_dedupes_and_rearms() {
-  local dir state config log verdict window key count
-  dir=$(make_case claude-permission-drift); state="$dir/state"; config="$dir/config"
+  local dir state log verdict window key count
+  dir=$(make_case claude-permission-drift); state="$dir/state"
   log="$dir/wakes.log"; verdict="$dir/verdict"; window="lab:w1:p1"
-  mkdir -p "$config"
-  printf 'window=%s\nbackend=herdr\nharness=claude\nkind=secondmate\nspawn_gen=g7\n' "$window" \
+  printf 'window=%s\nbackend=herdr\nharness=claude\nkind=secondmate\nspawn_gen=g7\nclaude_permission_mode=bypass\n' "$window" \
     > "$state/claude-mate.meta"
-  printf 'permission-drift\n' > "$verdict"
+  printf 'permission-drift\tdrifted\n' > "$verdict"
 
-  FM_STATE_OVERRIDE="$state" FM_CONFIG_OVERRIDE="$config" \
+  FM_STATE_OVERRIDE="$state" \
     FM_TEST_PERMISSION_VERDICT="$verdict" FM_TEST_PERMISSION_WAKE_LOG="$log" \
     bash -c '
       . "$1"
-      fm_backend_agent_state() { cat "$FM_TEST_PERMISSION_VERDICT"; }
+      fm_backend_agent_state_detail_for_meta() { tr -d "\n" < "$FM_TEST_PERMISSION_VERDICT"; }
       fm_wake_append() { printf "%s|%s|%s\n" "$1" "$2" "$3" >> "$FM_TEST_PERMISSION_WAKE_LOG"; }
       wake() { :; }
       key=$(window_key "$2")
       claude_permission_posture_check "$2" claude-mate "$key"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "alive\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "alive\tunobserved\n" > "$FM_TEST_PERMISSION_VERDICT"
+      claude_permission_posture_check "$2" claude-mate "$key"
+      [ -e "$STATE/.claude-permission-$key" ] || exit 22
+      printf "permission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
+      claude_permission_posture_check "$2" claude-mate "$key"
+      printf "alive\tconforming\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
       [ ! -e "$STATE/.claude-permission-$key" ] || exit 21
-      printf "permission-drift\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "permission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "ambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "ambiguous\tambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-    ' _ "$WATCH" "$window" || fail "Claude permission-drift watcher exercise failed"
+    ' _ "$WATCH" "$window" || fail "Claude permission-drift watcher exercise failed (rc $?)"
 
   count=$(LC_ALL=C wc -l < "$log" | tr -d '[:space:]')
   [ "$count" = 3 ] \
     || fail "permission drift should wake once per episode plus one ambiguity, got $count records"
-  [ "$(grep -c 'runtime-restored Claude process lacks the selected unattended bypass permission flag' "$log")" = 2 ] \
+  [ "$(grep -c 'lacks the bypass permission posture its launch recorded' "$log")" = 2 ] \
     || fail "permission drift did not re-arm exactly once after a conforming observation"
-  assert_contains "$(tail -1 "$log")" "multiple foreground Claude processes make runtime restoration ambiguous" \
-    "duplicate Claude processes did not surface the refusal reason"
+  assert_contains "$(tail -1 "$log")" "more than one foreground Claude process, or one process carrying both permission flags" \
+    "ambiguous attribution did not surface its refusal reason"
   key=$(printf '%s' "$window" | tr ':/.' '___')
   assert_contains "$(cat "$state/.claude-permission-$key")" ":bypass:ambiguous" \
     "the watcher did not retain the current ambiguous episode signature"
-  pass "Claude permission drift wakes once, clears on conformance, and refuses duplicate ambiguity"
+  pass "Claude permission drift wakes once per episode, survives unobserved polls, clears on conformance, and reports ambiguity"
+}
+
+# A record without a recorded launch posture is never judged, so the watcher
+# neither wakes nor writes a marker for it, whatever the backend would say.
+test_claude_permission_check_needs_a_recorded_posture() {
+  local dir state log window key
+  dir=$(make_case claude-permission-unrecorded); state="$dir/state"
+  log="$dir/wakes.log"; window="lab:w1:p1"
+  printf 'window=%s\nbackend=herdr\nharness=claude\nkind=secondmate\nspawn_gen=g7\n' "$window" \
+    > "$state/claude-mate.meta"
+  : > "$log"
+  FM_STATE_OVERRIDE="$state" FM_TEST_PERMISSION_WAKE_LOG="$log" \
+    bash -c '
+      . "$1"
+      fm_backend_agent_state_detail_for_meta() { printf "permission-drift\tdrifted"; }
+      fm_wake_append() { printf "%s|%s|%s\n" "$1" "$2" "$3" >> "$FM_TEST_PERMISSION_WAKE_LOG"; }
+      wake() { :; }
+      key=$(window_key "$2")
+      claude_permission_posture_check "$2" claude-mate "$key"
+    ' _ "$WATCH" "$window" || fail "unrecorded-posture watcher exercise failed"
+  [ ! -s "$log" ] || fail "a record with no launch posture must not produce a drift wake: $(cat "$log")"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  [ ! -e "$state/.claude-permission-$key" ] || fail "a record with no launch posture must not leave a dedupe marker"
+  pass "Claude permission check is skipped for a record with no launch posture"
 }
 
 test_status_span_actionable_classifier() {
@@ -4839,6 +4870,7 @@ test_paused_until_that_passed_is_rechecked_before_the_cadence() {
 
 
 test_claude_permission_drift_wake_dedupes_and_rearms
+test_claude_permission_check_needs_a_recorded_posture
 test_status_span_actionable_classifier
 test_status_span_survives_a_later_routine_append
 test_status_span_respects_decision_closure

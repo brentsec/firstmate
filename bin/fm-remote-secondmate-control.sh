@@ -124,7 +124,7 @@ state_value() { # <id>; prints recovery-grade state
     printf 'unverified\n'
     return 0
   fi
-  fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" "$TARGET_HOME/config" 2>/dev/null || printf 'unreadable\n'
+  fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" 2>/dev/null || printf 'unreadable\n'
 }
 
 print_route() { # <id>
@@ -173,7 +173,7 @@ cmd_launch() {
   meta=$(meta_path "$id")
   if [ -f "$meta" ]; then
     remote_endpoint_require "$id"
-    current=$(fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" "$TARGET_HOME/config" 2>/dev/null || printf 'unreadable\n')
+    current=$(fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" 2>/dev/null || printf 'unreadable\n')
     case "$current" in
       alive)
         print_route "$id"

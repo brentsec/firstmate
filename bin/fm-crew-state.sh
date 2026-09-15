@@ -215,7 +215,7 @@ if [ -n "$REMOTE_HOST" ]; then
       emit unknown remote-endpoint "alive on $REMOTE_HOST (an idle secondmate is healthy)"
       ;;
     permission-drift)
-      emit unknown remote-endpoint "remote Claude process lacks the selected unattended permission flag on $REMOTE_HOST; relaunch in place"
+      emit unknown remote-endpoint "remote Claude process lacks the permission posture its launch recorded on $REMOTE_HOST; relaunch in place"
       ;;
     dead|missing)
       emit unknown remote-endpoint "remote endpoint $REMOTE_STATE on $REMOTE_HOST"
@@ -779,16 +779,18 @@ fi
 # read as death - a backend that failed to answer is unknown, never death, for
 # both classifier-backed backends (tmux and herdr) - and every death-class
 # verdict reports unknown rather than trusting a possibly-stale status log as
-# the current state. A readable runtime-restored Claude is checked here too:
-# process existence cannot mask a missing unattended permission flag.
+# the current state. A live Claude process is also checked against the
+# permission posture its own launch recorded: process existence cannot mask a
+# lost unattended flag, while a record with no recorded posture, or a posture
+# read that could not be made, keeps the ordinary live reading.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
 AGENT_STATE=none
 case "$TASK_BACKEND:$HARNESS" in
   herdr:claude*)
-    AGENT_STATE=$(fm_backend_agent_state_for_meta "$META" "$FM_BACKEND_CONFIG_DIR")
+    AGENT_STATE=$(fm_backend_agent_state_for_meta "$META")
     case "$AGENT_STATE" in
       permission-drift)
-        emit unknown none "Claude process lacks the selected unattended permission flag; relaunch in place"
+        emit unknown none "Claude process lacks the permission posture its launch recorded; relaunch in place"
         ;;
     esac
     ;;
@@ -821,7 +823,7 @@ if ! pane_readable "$BACKEND_TARGET"; then
   # Backends with no classifier (orca, zellij, and cmux all report unverified)
   # keep their historical capture-failure-means-gone reading.
   case "$TASK_BACKEND:$AGENT_STATE" in
-    tmux:none|herdr:none) AGENT_STATE=$(fm_backend_agent_state_for_meta "$META" "$FM_BACKEND_CONFIG_DIR") ;;
+    tmux:none|herdr:none) AGENT_STATE=$(fm_backend_agent_state_for_meta "$META") ;;
   esac
   case "$TASK_BACKEND:$AGENT_STATE" in
     tmux:alive|herdr:alive)

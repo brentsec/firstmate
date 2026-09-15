@@ -295,17 +295,18 @@ An unreadable or unparseable process view reads `unknown`, which refuses lifecyc
 
 The generic Herdr agent-liveness probe reuses that pane classifier, then applies two recovery-only refinements.
 A structurally gone pane or a pane read from a session positively reported as having no running server becomes `missing`, a restored agent-less shell and a stale registration over a shell-only pane both become `dead`, a registered agent with a live process becomes `alive`, and every other unexpected read becomes `unreadable`.
-For a task recorded on Claude, one exact foreground Claude argv is also checked against the current home's selected `bypass` or `auto` permission mode.
-A missing selected flag becomes `permission-drift`, multiple foreground Claude processes become `ambiguous`, and a non-Claude foreground tool preserves the generic live verdict because a healthy agent may temporarily hand it the pty.
-Attribution is Claude's own executable name, never a claude-named script a worker happens to run, and a build that reports no argv at all is an observability gap that likewise preserves the generic live verdict rather than degrading it.
+For a task recorded on Claude whose record carries the `bypass` or `auto` mode its launch actually used, one exact foreground Claude argv is also checked against that recorded launch posture, never against the current home's mutable configuration, so editing the configuration changes only the next launch.
+A missing recorded flag becomes `permission-drift`, more than one foreground Claude process or one process carrying both permission flags becomes `ambiguous`, and a non-Claude foreground tool preserves the generic live verdict because a healthy agent may temporarily hand it the pty.
+Attribution is the exact executable name `claude`, never a claude-named script or a `claude-`prefixed helper a worker happens to run, and a build that reports no argv, a failed or malformed process read, or a read describing another pane is an observability gap that likewise preserves the generic live verdict rather than degrading it.
 Exact argv boundaries are required because a flattened command line can contain permission-flag text inside the worker prompt.
+The posture is read from the same `pane process-info` snapshot the liveness verdict rested on, so a Claude endpoint costs one process query, not a second full classification.
 Neither the stopped-server exception, stale-registration verdict, nor permission check widens husk detection or any close authority; those paths still refuse an unreadable pane, and a `stale-agent` pane is reused by recovery, never closed as a husk, because the shell it holds may be a nested worktree shell.
 A process with permission drift remains alive in the compatibility view so no fresh spawn can join it; only `bin/fm-control.sh relaunch` may stop the one attributed process and reuse its exact endpoint and worktree.
 Native registration still identifies Pi by name where tmux would see a generic interpreter; the process-level proof only decides whether that registration is backed by a running process.
 `tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh` pins the live-Pi versus leftover-shell distinction; [`verification/runtime-backends.md`](verification/runtime-backends.md#agent-lifecycle-control) owns the versioned evidence.
 
-The session-start digest uses this policy-aware probe for Claude endpoints, and the session-start secondmate sweep automatically relaunches an attributed drifted Claude process.
-The watcher runs the same narrow check before its idle-secondmate exemption, so runtime restoration is surfaced for ordinary workers and secondmates without treating every quiet mate as stale.
+The session-start digest keeps its cheap presence read for every endpoint and adds one narrow posture read only for a live Claude endpoint whose record carries a recorded mode; the session-start secondmate sweep automatically relaunches an attributed drifted Claude process.
+The watcher runs the same narrow check before its idle-secondmate exemption, so runtime restoration is surfaced for ordinary workers and secondmates without treating every quiet mate as stale; its one-per-episode notification marker survives a temporary unobserved foreground tool and clears only on a conforming observation or a gone endpoint.
 
 ## Push events and polling fallback
 

@@ -35,7 +35,7 @@ A recorded `harness=` is not always an exact adapter name: a task launched from 
 | `relaunch` | Replace the running agent with a new one in the same endpoint and worktree, on the exact recorded adapter or an explicitly chosen harness, model, and effort. | The new agent is alive on the recorded endpoint, and the durable record names the harness that is actually running. |
 
 An exit that delivers lifecycle input but cannot prove the agent stopped fails with `exit=unconfirmed`, reports the observed agent state and any interrupt cancellation claim, and never claims that nothing changed.
-A policy-aware `permission-drift` state is one attributed live Claude process whose runtime-restored argv omitted the selected unattended permission flag.
+A policy-aware `permission-drift` state is one attributed live Claude process whose exact argv lacks the permission posture the task's own launch recorded.
 It is alive for duplicate prevention, but `relaunch` may transactionally stop and replace it in the same endpoint and worktree; an ambiguous multi-Claude process set still refuses without sending any lifecycle input.
 Interrupt never rewrites busy state as proof of its own success.
 Claude exposes no lifecycle acknowledgement for a manual interrupt, so delivery succeeds with `cancel=unconfirmed` and its adapter-owned busy state remains as observed.
@@ -103,7 +103,7 @@ Switching harness is therefore one ordinary relaunch rather than a separate mech
   zellij, orca, and cmux are refused rather than reported as successful blind.
 - An ambiguous or unreadable endpoint state refuses.
   Only a positively classified state acts.
-  `permission-drift` is the narrow live-process exception: exact argv proves one Claude process but not its required unattended flag, so only ordinary control-plane stop or relaunch may act on it; a fresh spawn remains forbidden.
+  `permission-drift` is the narrow live-process exception: exact argv proves one Claude process but not the permission posture its launch recorded, so only ordinary control-plane stop or relaunch may act on it; a fresh spawn remains forbidden.
 - `exit`'s composer-empty check, above, is itself a fail-closed boundary that `relaunch` inherits by stopping the old agent through `exit`.
 - `fm-spawn --relaunch` independently refuses unless the recorded endpoint is positively agent-free, so a replacement can never join a live agent.
   It also requires the shell to be in the recorded worktree: tmux refuses immediately when it is not, while Herdr sends one `cd` to the recorded path and refuses unless a subsequent path read confirms the move.

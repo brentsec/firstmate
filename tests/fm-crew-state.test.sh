@@ -1450,18 +1450,50 @@ test_no_run_herdr_restored_claude_without_bypass_is_not_alive() {
   make_repo_on_branch "$d/wt" fm/feat-herdr-restored
   make_fakebin "$d" >/dev/null
   fm_write_meta "$d/state/feat-herdr-restored.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
-    "backend=herdr" "harness=claude"
+    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
   FM_FAKE_AXI_STATUS=""
   FM_FAKE_RUNS_LIST=""
   FM_FAKE_HERDR_AGENT_STATUS=idle
   FM_FAKE_HERDR_PROCESS=restored
   local out; out=$(run_crew_state "$d" feat-herdr-restored)
-  assert_contains "$out" "state: unknown" "a restored Claude without bypass must not read alive"
-  assert_contains "$out" "lacks the selected unattended permission flag" \
+  assert_contains "$out" "state: unknown" "a restored Claude without its recorded bypass posture must not read alive"
+  assert_contains "$out" "lacks the permission posture its launch recorded" \
     "the public state reader must name the permission drift"
   assert_contains "$out" "relaunch in place" \
     "the public state reader must preserve the endpoint and local copy through relaunch"
-  pass "fm-crew-state detects a native claude --resume that lost bypass permissions"
+  pass "fm-crew-state detects a native claude --resume that lost its recorded bypass posture"
+}
+
+# The drift expectation is the task's recorded launch posture. A record with no
+# recorded posture has no conclusive expectation, so the same restored process
+# keeps its ordinary live reading, and the current config (which would call it
+# drift) is never consulted.
+test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live() {
+  command -v jq >/dev/null 2>&1 || { pass "Herdr unrecorded-posture test skipped without jq"; return; }
+  reset_fakes
+  local d; d=$(new_case herdr-unrecorded-claude)
+  make_repo_on_branch "$d/wt" fm/feat-herdr-unrecorded
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-herdr-unrecorded.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude"
+  mkdir -p "$d/config"
+  printf 'bypass\n' > "$d/config/claude-permission-mode"
+  printf 'working: implementing\n' > "$d/state/feat-herdr-unrecorded.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_TMUX_MISSING=1
+  FM_FAKE_HERDR_AGENT_STATUS=idle
+  FM_FAKE_HERDR_BUSY=0
+  FM_FAKE_HERDR_PROCESS=restored
+  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-unrecorded)
+  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-unrecorded idle --gen "$gen" \
+    --source claude-hook --event stop
+  local out; out=$(FM_CONFIG_OVERRIDE="$d/config" run_crew_state "$d" feat-herdr-unrecorded)
+  assert_not_contains "$out" "permission posture" \
+    "a record with no recorded launch posture must not be judged against the current config"
+  assert_contains "$out" "source: status-log" \
+    "a live restored Claude with no recorded posture must keep its ordinary reading"
+  pass "fm-crew-state needs a recorded launch posture before it calls a live Claude drifted"
 }
 
 test_no_run_herdr_unknown_uses_backend_capture() {
@@ -2553,6 +2585,7 @@ test_no_run_busy_pane
 test_no_run_footer_text_alone_is_not_working
 test_no_run_grok_uses_isolated_fallback
 test_no_run_herdr_restored_claude_without_bypass_is_not_alive
+test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
 test_no_run_herdr_alive_with_failed_read_stays_live

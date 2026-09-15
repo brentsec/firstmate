@@ -471,8 +471,8 @@ test_restored_claude_permission_posture_is_recovery_grade() {
     || fail "Herdr's claude --resume without bypass should be permission-drift, got '$restored'"
   [ "$conflicting" = ambiguous ] \
     || fail "one Claude process carrying conflicting permission flags must be ambiguous, got '$conflicting'"
-  [ "$malformed" = unreadable ] \
-    || fail "a flattened argv string must stay unreadable, got '$malformed'"
+  [ "$malformed" = alive ] \
+    || fail "a flattened argv string is an unreadable posture that must not degrade a proven-live endpoint, got '$malformed'"
   [ "$prompt_mentions_flag" = permission-drift ] \
     || fail "a flag mentioned only inside prompt text must not satisfy exact argv, got '$prompt_mentions_flag'"
   [ "$duplicate" = ambiguous ] \
@@ -481,19 +481,92 @@ test_restored_claude_permission_posture_is_recovery_grade() {
     || fail "a temporary foreground tool must preserve the registered live verdict, got '$tool'"
   [ "$generic" = alive ] \
     || fail "callers without task policy must retain generic process liveness, got '$generic'"
-  pass "Herdr recovery state detects restored Claude permission drift and refuses malformed or ambiguous argv"
+  pass "Herdr recovery state detects restored Claude permission drift, refuses ambiguity, and keeps a live endpoint alive across an unreadable argv"
 }
 
-# A worker running one of this repo's own claude-NAMED tools in its pane is the
-# reachable false-positive that would stop or duplicate-report a healthy agent,
-# and a build that reports no argv at all is an observability gap rather than a
-# contradiction. Neither may degrade the recovery-grade verdict.
+# The posture read is judged against the mode the caller passes, which is the
+# task's recorded launch posture: the same restored argv is drift for a
+# bypass launch and conforming for a launch that recorded auto, whatever the
+# current config says. A failed or foreign-pane process read is unreadable
+# and, like an absent argv, never degrades the proven live verdict.
+test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive() {
+  local auto_resume bypass_resume failed_read foreign_pane
+  auto_resume=$(claude_permission_state_case auto \
+    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
+  bypass_resume=$(claude_permission_state_case bypass \
+    '[{"name":"node","argv0":"claude","argv":["claude","--resume","session-123","--permission-mode","auto"]}]')
+  failed_read=$(FM_TEST_MODE=bypass bash -c '. "$0/bin/backends/herdr.sh"
+      fm_backend_herdr_pane_agent_state() { printf live; }
+      fm_backend_herdr_cli() { return 1; }
+      fm_backend_herdr_agent_state fmtest:w1:p2 claude "$FM_TEST_MODE"' "$ROOT")
+  foreign_pane=$(FM_TEST_MODE=bypass bash -c '. "$0/bin/backends/herdr.sh"
+      fm_backend_herdr_pane_agent_state() { printf live; }
+      fm_backend_herdr_cli() {
+        printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w9:p9\",\"foreground_processes\":[{\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"x\"]}]}}}\n"
+      }
+      fm_backend_herdr_agent_state fmtest:w1:p2 claude "$FM_TEST_MODE"' "$ROOT")
+
+  [ "$auto_resume" = alive ] \
+    || fail "a resumed process carrying the recorded auto posture must be alive, got '$auto_resume'"
+  [ "$bypass_resume" = permission-drift ] \
+    || fail "the same argv must be drift against a recorded bypass posture, got '$bypass_resume'"
+  [ "$failed_read" = alive ] \
+    || fail "a failed posture read must not downgrade a proven-live endpoint, got '$failed_read'"
+  [ "$foreign_pane" = alive ] \
+    || fail "a process read describing another pane must not downgrade a proven-live endpoint, got '$foreign_pane'"
+  pass "Herdr posture is judged against the recorded launch mode and an unreadable read never degrades liveness"
+}
+
+# The liveness verdict and the posture read share ONE `pane process-info`
+# snapshot: the recovery-grade classifier must not pay a second round-trip per
+# Claude endpoint, and the posture it reports is the one the liveness verdict
+# rested on.
+test_policy_read_reuses_the_liveness_process_snapshot() {
+  local log="$TMP_ROOT/snapshot-calls.log" detail state posture calls
+  : > "$log"
+  detail=$(FM_TEST_CALL_LOG="$log" bash -c '. "$0/bin/backends/herdr.sh"
+      fm_backend_herdr_cli() {
+        printf "%s\n" "$*" >> "$FM_TEST_CALL_LOG"
+        case "$2 $3" in
+          "pane get") printf "{\"result\":{\"pane\":{\"pane_id\":\"w1:p2\"}}}\n" ;;
+          "agent get") printf "{\"result\":{\"agent\":{\"agent\":\"claude\",\"agent_status\":\"idle\"}}}\n" ;;
+          "pane process-info") printf "{\"result\":{\"type\":\"pane_process_info\",\"process_info\":{\"pane_id\":\"w1:p2\",\"shell_pid\":4242,\"foreground_processes\":[{\"pid\":4243,\"name\":\"node\",\"argv0\":\"claude\",\"argv\":[\"claude\",\"--resume\",\"session-123\"]}]}}}\n" ;;
+          *) return 1 ;;
+        esac
+      }
+      fm_backend_herdr_agent_state_detail fmtest:w1:p2 claude bypass' "$ROOT")
+  state=${detail%%$'\t'*}
+  posture=${detail#*$'\t'}
+  calls=$(grep -c 'pane process-info' "$log" || true)
+  [ "$state" = permission-drift ] \
+    || fail "a restored claude --resume must read as drift against a recorded bypass launch, got '$state'"
+  [ "$posture" = drifted ] \
+    || fail "the detail view must carry the posture the verdict rested on, got '$posture'"
+  [ "$calls" = 1 ] \
+    || fail "the posture read must reuse the liveness snapshot instead of a second process-info call, got $calls calls"
+  pass "Herdr policy read reuses the one liveness process snapshot and reports its posture"
+}
+
+# A worker running one of this repo's own claude-NAMED tools, or an
+# extension-less helper such as `claude-usage`, in its pane is the reachable
+# false-positive that would stop or duplicate-report a healthy agent, and a
+# build that reports no argv at all is an observability gap rather than a
+# contradiction. None of them may degrade the recovery-grade verdict, and only
+# the exact executable name `claude` is ever attributed.
 test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
-  local script_alone script_beside_agent argv_absent argv_absent_only
+  local script_alone script_beside_agent helper_alone helper_beside_agent helper_beside_restored wrapper_alone argv_absent argv_absent_only
   script_alone=$(claude_permission_state_case bypass \
     '[{"name":"bash","argv0":"/repo/bin/fm-claude-trust.sh","argv":["/repo/bin/fm-claude-trust.sh"]}]')
   script_beside_agent=$(claude_permission_state_case bypass \
     '[{"name":"bash","argv0":"/repo/tests/fm-claude-trust.test.sh","argv":["/repo/tests/fm-claude-trust.test.sh"]},{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  helper_alone=$(claude_permission_state_case bypass \
+    '[{"name":"claude-usage","argv0":"/usr/local/bin/claude-usage","argv":["claude-usage","--resume","x"]}]')
+  helper_beside_agent=$(claude_permission_state_case bypass \
+    '[{"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
+  helper_beside_restored=$(claude_permission_state_case bypass \
+    '[{"name":"claude-usage","argv0":"claude-usage","argv":["claude-usage"]},{"name":"node","argv0":"claude","argv":["claude","--resume","session-123"]}]')
+  wrapper_alone=$(claude_permission_state_case bypass \
+    '[{"name":"bash","argv0":"/opt/tools/claude-wrapper","argv":["/opt/tools/claude-wrapper","--resume","x"]}]')
   argv_absent=$(claude_permission_state_case bypass \
     '[{"name":"node","argv0":"claude"}]')
   argv_absent_only=$(claude_permission_state_case bypass \
@@ -503,11 +576,19 @@ test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
     || fail "a claude-named script must not be attributed as the worker, got '$script_alone'"
   [ "$script_beside_agent" = alive ] \
     || fail "a claude-named script beside a conforming worker must not read as duplicate ownership, got '$script_beside_agent'"
+  [ "$helper_alone" = alive ] \
+    || fail "a claude-prefixed helper alone must be unobserved, never drift, got '$helper_alone'"
+  [ "$helper_beside_agent" = alive ] \
+    || fail "a claude-prefixed helper beside a conforming worker must not read as ambiguous, got '$helper_beside_agent'"
+  [ "$helper_beside_restored" = permission-drift ] \
+    || fail "a claude-prefixed helper must not hide the one restored worker's drift behind ambiguity, got '$helper_beside_restored'"
+  [ "$wrapper_alone" = alive ] \
+    || fail "an extension-less claude-prefixed wrapper must not be attributed, got '$wrapper_alone'"
   [ "$argv_absent" = alive ] \
     || fail "a build that reports no argv must keep its liveness verdict, got '$argv_absent'"
   [ "$argv_absent_only" = alive ] \
     || fail "an explicitly null argv must keep its liveness verdict, got '$argv_absent_only'"
-  pass "Herdr Claude attribution requires exact identity and an absent argv never degrades liveness"
+  pass "Herdr Claude attribution accepts only the exact executable name and an absent argv never degrades liveness"
 }
 
 # --- stale agent registration over a shell-only pane (issue #4115) -----------
@@ -5307,6 +5388,8 @@ test_cli_helper_sets_env_and_appends_trailing_session_flag
 test_agent_state_bypasses_a_stale_client_shadowing_a_compatible_one
 test_recovery_grade_read_widens_only_at_its_own_boundary
 test_restored_claude_permission_posture_is_recovery_grade
+test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive
+test_policy_read_reuses_the_liveness_process_snapshot
 test_claude_attribution_needs_exact_identity_and_never_degrades_liveness
 test_stale_registration_over_a_shell_only_pane_is_agent_free
 test_stale_registration_ignores_status_and_reads_the_process

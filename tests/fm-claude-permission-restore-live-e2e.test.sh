@@ -233,7 +233,7 @@ printf '%s' "$RESTORED_FLAGS" | jq -e \
 STATE_OUT=$(env FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" CLAUDE_CONFIG_DIR="$CLAUDE_DIR" \
   "$ROOT/bin/fm-crew-state.sh" e2e-claude)
 printf '%s\n' "$STATE_OUT" | grep -F \
-  'lacks the selected unattended permission flag; relaunch in place' >/dev/null
+  'lacks the permission posture its launch recorded; relaunch in place' >/dev/null
 printf 'ok - public state reader detects the restored permission drift\n'
 
 cat > "$SCRATCH/relaunch.sh" <<EOF

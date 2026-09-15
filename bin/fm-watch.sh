@@ -401,39 +401,49 @@ window_key() {  # <window>
 
 # Detect the one restoration path that process liveness alone cannot validate:
 # Herdr can synthesize `claude --resume` after a session or machine restart
-# without replaying Firstmate's unattended permission flag. Run before the
-# ordinary secondmate idle exemption, so an idle restored mate cannot mask the
-# drift indefinitely. One exact process is routed through ordinary stuck-worker
-# recovery; multiple foreground Claude processes are reported as ambiguous and
-# never acted on automatically. A generation-and-mode signature suppresses only
-# repeats of the same finding, and is cleared when the endpoint returns to a
-# valid or agent-free state.
+# without replaying Firstmate's unattended permission flag. The expectation is
+# the mode the task's own launch recorded (claude_permission_mode= in its
+# record), so a config edit never makes a correctly launched worker read as
+# drift, and a record without one is not checked. Run before the ordinary
+# secondmate idle exemption, so an idle restored mate cannot mask the drift
+# indefinitely. One exact process is routed through ordinary stuck-worker
+# recovery; an ambiguous attribution (more than one foreground Claude process,
+# or one carrying both flags) is reported and never acted on automatically. A
+# generation-and-mode signature suppresses repeats of the same finding and is
+# cleared only by positive evidence: a `conforming` posture read, or an
+# endpoint proven dead or missing. An `unobserved` poll, when a tool briefly
+# holds the pane's foreground, proves nothing either way and keeps the marker,
+# so an unfixed drift is reported once per episode rather than at every tool
+# boundary.
 claude_permission_posture_check() {  # <window> <task> <marker-key>
-  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen state marker signature reason
+  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen detail state posture marker signature reason
   [ -n "$task" ] || return 0
   meta="$STATE/$task.meta"
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
   backend=$(fm_backend_of_meta "$meta")
   harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
   case "$backend:$harness" in herdr:claude*) ;; *) return 0 ;; esac
-  if ! command -v fm_claude_permission_mode >/dev/null 2>&1; then
-    # shellcheck source=bin/fm-claude-permission-lib.sh
-    . "$SCRIPT_DIR/fm-claude-permission-lib.sh"
-  fi
-  mode=$(fm_claude_permission_mode "$FM_BACKEND_CONFIG_DIR" 2>/dev/null) || return 0
+  mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
+  case "$mode" in bypass|auto) ;; *) return 0 ;; esac
   spawn_gen=$(fm_backend_meta_exact_value "$meta" spawn_gen 2>/dev/null || true)
-  state=$(fm_backend_agent_state "$backend" "$w" claude "$mode" 2>/dev/null || printf 'unreadable')
+  detail=$(fm_backend_agent_state_detail_for_meta "$meta" 2>/dev/null || printf 'unreadable\t')
+  state=${detail%%$'\t'*}
+  posture=${detail#*$'\t'}
   marker="$STATE/.claude-permission-$key"
   signature="${spawn_gen:-legacy}:$mode:$state"
   case "$state" in
     permission-drift)
-      reason="stale: $w (runtime-restored Claude process lacks the selected unattended $mode permission flag; relaunch the worker safely in its recorded endpoint and local copy)"
+      reason="stale: $w (the live Claude process lacks the $mode permission posture its launch recorded; relaunch the worker safely in its recorded endpoint and local copy)"
       ;;
     ambiguous)
-      reason="stale: $w (multiple foreground Claude processes make runtime restoration ambiguous; refuse automatic recovery and reconcile ownership before any lifecycle action)"
+      reason="stale: $w (Claude process attribution is ambiguous: more than one foreground Claude process, or one process carrying both permission flags; refuse automatic recovery and reconcile the endpoint before any lifecycle action)"
       ;;
-    alive|dead|missing)
+    dead|missing)
       rm -f "$marker"
+      return 0
+      ;;
+    alive)
+      [ "$posture" != conforming ] || rm -f "$marker"
       return 0
       ;;
     *) return 0 ;;

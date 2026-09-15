@@ -1136,38 +1136,48 @@ test_spawn_autodetect_nesting_resolves_tmux_silently() {
 }
 
 # fm_backend_agent_state_for_meta adds Claude posture to the recovery-grade
-# view; it must never SUBTRACT from it. A permission config this home cannot
-# parse refuses a spawn (tests/fm-spawn-dispatch-profile.test.sh), but it says
-# nothing about a running process, so the endpoint keeps its generic state and
-# the captain can still stop, interrupt, or relaunch the fleet. The policy read
-# is likewise scoped to the backend that owns the classifier.
-for_meta_dispatch() {  # <meta> <config-dir> -> the arguments the classifier received
+# view from the task's OWN recorded launch posture; it must never SUBTRACT from
+# it, and it must never read the mutable current config, so editing
+# config/claude-permission-mode can only change the next launch. A record with
+# no recorded posture, a malformed one, or a backend without the classifier
+# keeps the generic state, and the captain can still stop, interrupt, or
+# relaunch the fleet.
+for_meta_dispatch() {  # <meta> -> the arguments the classifier received
   (
     # shellcheck disable=SC2317,SC2329 # Invoked indirectly by fm_backend_agent_state_for_meta.
-    fm_backend_agent_state() { printf 'args=%s' "$*"; }
-    fm_backend_agent_state_for_meta "$1" "$2" 2>/dev/null
+    fm_backend_agent_state_detail() { printf 'args=%s\t' "$*"; }
+    fm_backend_agent_state_for_meta "$1" 2>/dev/null
   )
 }
 
-test_agent_state_for_meta_adds_policy_without_subtracting_liveness() {
-  local dir=$TMP_ROOT/for-meta config=$TMP_ROOT/for-meta/config valid malformed on_tmux
+test_agent_state_for_meta_uses_the_recorded_launch_posture() {
+  local dir=$TMP_ROOT/for-meta config=$TMP_ROOT/for-meta/config recorded recorded_auto unrecorded malformed on_tmux
   mkdir -p "$dir" "$config"
-  fm_write_meta "$dir/herdr.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr"
-  fm_write_meta "$dir/tmux.meta" "window=firstmate:fm-x1" "harness=claude" "backend=tmux"
+  fm_write_meta "$dir/recorded.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr" "claude_permission_mode=bypass"
+  fm_write_meta "$dir/recorded-auto.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr" "claude_permission_mode=auto"
+  fm_write_meta "$dir/unrecorded.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr"
+  fm_write_meta "$dir/malformed.meta" "window=lab:w1:p2" "harness=claude" "backend=herdr" "claude_permission_mode=Bypass"
+  fm_write_meta "$dir/tmux.meta" "window=firstmate:fm-x1" "harness=claude" "backend=tmux" "claude_permission_mode=bypass"
 
-  printf 'bypass\n' > "$config/claude-permission-mode"
-  valid=$(for_meta_dispatch "$dir/herdr.meta" "$config")
-  printf 'Bypass\n' > "$config/claude-permission-mode"
-  malformed=$(for_meta_dispatch "$dir/herdr.meta" "$config")
-  on_tmux=$(for_meta_dispatch "$dir/tmux.meta" "$config")
+  # The current config disagrees with every record and must be irrelevant.
+  printf 'auto\n' > "$config/claude-permission-mode"
+  recorded=$(FM_CONFIG_OVERRIDE="$config" for_meta_dispatch "$dir/recorded.meta")
+  recorded_auto=$(FM_CONFIG_OVERRIDE="$config" for_meta_dispatch "$dir/recorded-auto.meta")
+  unrecorded=$(FM_CONFIG_OVERRIDE="$config" for_meta_dispatch "$dir/unrecorded.meta")
+  malformed=$(FM_CONFIG_OVERRIDE="$config" for_meta_dispatch "$dir/malformed.meta")
+  on_tmux=$(FM_CONFIG_OVERRIDE="$config" for_meta_dispatch "$dir/tmux.meta")
 
-  [ "$valid" = "args=herdr lab:w1:p2 claude bypass" ] \
-    || fail "a readable permission config must reach the Herdr classifier, got '$valid'"
+  [ "$recorded" = "args=herdr lab:w1:p2 claude bypass" ] \
+    || fail "the recorded bypass launch posture must reach the Herdr classifier, got '$recorded'"
+  [ "$recorded_auto" = "args=herdr lab:w1:p2 claude auto" ] \
+    || fail "the recorded auto launch posture must reach the Herdr classifier, got '$recorded_auto'"
+  [ "$unrecorded" = "args=herdr lab:w1:p2" ] \
+    || fail "a record with no launch posture has no drift expectation and must keep the generic state, got '$unrecorded'"
   [ "$malformed" = "args=herdr lab:w1:p2" ] \
-    || fail "an unparseable permission config must keep the generic recovery state, got '$malformed'"
+    || fail "a malformed recorded posture must keep the generic recovery state, got '$malformed'"
   [ "$on_tmux" = "args=tmux firstmate:fm-x1" ] \
-    || fail "a backend with no policy classifier must not consult the permission config, got '$on_tmux'"
-  pass "fm_backend_agent_state_for_meta: an unreadable policy never degrades endpoint liveness"
+    || fail "a backend with no policy classifier must not receive a posture, got '$on_tmux'"
+  pass "fm_backend_agent_state_for_meta: drift is judged against the recorded launch posture, never the current config"
 }
 
 test_backend_name_precedence
@@ -1185,7 +1195,7 @@ test_backend_validate_refuses_unknown
 test_backend_source_shell_portable
 test_backend_validate_spawn_accepts_orca
 test_meta_get_and_backend_of_meta
-test_agent_state_for_meta_adds_policy_without_subtracting_liveness
+test_agent_state_for_meta_uses_the_recorded_launch_posture
 test_resolve_selector_three_forms
 test_backend_of_selector_matches_explicit_target_meta
 test_send_tmux_contract

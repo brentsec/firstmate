@@ -21,7 +21,8 @@
 #   - fm_backend_agent_alive preserves the older three-state compatibility view.
 #   - bin/fm-bootstrap.sh's secondmate_liveness_sweep fresh-spawns only dead or
 #     missing endpoints, transactionally relaunches one attributed Herdr Claude
-#     process whose exact argv lost the selected permission flag, keeps
+#     process whose exact argv lost the permission posture its own launch
+#     recorded (never one that merely disagrees with an edited config), keeps
 #     successful recovery and already-live results silent by default, and
 #     reports ambiguous and unreadable targets distinctly.
 #   - The sweep converges: once a secondmate reads alive, a later run never
@@ -491,7 +492,7 @@ test_sweep_relaunches_restored_claude_permission_drift_in_place() {
   local w fb tmuxfb herdrfb root log spawn_log out
   w=$(new_world sweep-claude-permission-drift)
   add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\n' >> "$w/home/state/sm1.meta"
+  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
   printf 'claude\n' > "$w/home/config/secondmate-harness"
   fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
   root=$(make_control_probe_root "$w")
@@ -514,7 +515,7 @@ test_sweep_refuses_ambiguous_restored_claude_processes() {
   local w fb tmuxfb herdrfb root log spawn_log out
   w=$(new_world sweep-claude-permission-ambiguous)
   add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\n' >> "$w/home/state/sm1.meta"
+  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
   printf 'claude\n' > "$w/home/config/secondmate-harness"
   fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
   root=$(make_control_probe_root "$w")
@@ -529,6 +530,56 @@ test_sweep_refuses_ambiguous_restored_claude_processes() {
   [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
     || fail "ambiguous restored Claude processes triggered lifecycle work"
   pass "sweep: ambiguous restored Claude processes refuse every automatic recovery action"
+}
+
+# The expectation is the recorded launch, not the current file: editing
+# config/claude-permission-mode while the fleet runs must not make the sweep
+# replace a worker that still carries exactly the posture it was launched with.
+test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit() {
+  local w fb tmuxfb herdrfb root log spawn_log out
+  w=$(new_world sweep-claude-config-edit)
+  add_sm_home "$w" sm1 lab:w1:p1 claude
+  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
+  printf 'claude\n' > "$w/home/config/secondmate-harness"
+  printf 'auto\n' > "$w/home/config/claude-permission-mode"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
+  root=$(make_control_probe_root "$w")
+  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
+
+  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
+    FM_ROOT_OVERRIDE="$root" FM_TEST_HERDR_CLAUDE_STATE=alive \
+    FM_TEST_HERDR_PANE_ID=w1:p1 FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
+
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "a worker still carrying its recorded posture must stay silent after a config edit"
+  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
+    || fail "a config edit alone replaced a correctly launched running worker: control=$(cat "$log") spawn=$(cat "$spawn_log")"
+  pass "sweep: a config edit changes only the next launch and never relaunches a conforming worker"
+}
+
+# A record written before the launch posture existed carries no conclusive
+# expectation, so even a restored-looking argv is not drift: the generic live
+# reading stands until the next Firstmate-owned launch records one.
+test_sweep_needs_a_recorded_posture_before_calling_drift() {
+  local w fb tmuxfb herdrfb root log spawn_log out
+  w=$(new_world sweep-claude-unrecorded)
+  add_sm_home "$w" sm1 lab:w1:p1 claude
+  printf 'backend=herdr\nspawn_gen=g7\n' >> "$w/home/state/sm1.meta"
+  printf 'claude\n' > "$w/home/config/secondmate-harness"
+  printf 'bypass\n' > "$w/home/config/claude-permission-mode"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
+  root=$(make_control_probe_root "$w")
+  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
+
+  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
+    FM_ROOT_OVERRIDE="$root" FM_TEST_HERDR_CLAUDE_STATE=drift \
+    FM_TEST_HERDR_PANE_ID=w1:p1 FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
+
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "an unrecorded posture must not produce a liveness diagnostic"
+  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
+    || fail "a record with no launch posture was relaunched from the current config: control=$(cat "$log") spawn=$(cat "$spawn_log")"
+  pass "sweep: drift needs a recorded launch posture, never the current config alone"
 }
 
 test_remote_sweep_relaunches_drift_and_refuses_ambiguity() {
@@ -729,6 +780,8 @@ test_sweep_respawns_confirmed_dead_secondmate
 test_sweep_leaves_alive_secondmate_untouched
 test_sweep_relaunches_restored_claude_permission_drift_in_place
 test_sweep_refuses_ambiguous_restored_claude_processes
+test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit
+test_sweep_needs_a_recorded_posture_before_calling_drift
 test_remote_sweep_relaunches_drift_and_refuses_ambiguity
 test_sweep_respawns_authoritatively_missing_pi_secondmate
 test_sweep_respawns_authoritatively_missing_pi_signed_secondmate

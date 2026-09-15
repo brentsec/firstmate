@@ -1367,6 +1367,86 @@ EOF
   pass "herdr endpoint liveness is reported per task: alive for a live pane, dead for a gone one"
 }
 
+# make_fake_herdr_claude_posture <fakebin> <live-pane> <argv-json>: the
+# liveness primitive above plus a `pane process-info` answer describing one
+# foreground Claude process with the given argv. Every call is appended to
+# FM_FAKE_HERDR_LOG so the digest's per-endpoint cost is countable; anything
+# else (agent get, full classification) fails, because the digest must never
+# need it.
+make_fake_herdr_claude_posture() {
+  local fakebin=$1 live=$2 argv=$3
+  cat > "$fakebin/herdr" <<SH
+#!/usr/bin/env bash
+set -u
+printf '%s\\n' "\$*" >> "\${FM_FAKE_HERDR_LOG:?}"
+sub='' pane='' prev=''
+for a in "\$@"; do
+  case "\$prev \$a" in
+    "pane get") sub=get ;;
+    "pane process-info") sub=process-info ;;
+  esac
+  case "\$prev" in
+    get) [ "\$sub" = get ] && [ -z "\$pane" ] && pane=\$a ;;
+    --pane) pane=\$a ;;
+  esac
+  prev=\$a
+done
+case "\$sub" in
+  get) [ "\$pane" = "$live" ] && exit 0; exit 1 ;;
+  process-info)
+    [ "\$pane" = "$live" ] || exit 1
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[{"pid":4243,"name":"node","argv0":"claude","argv":$argv}]}}}\\n' "$live"
+    exit 0 ;;
+esac
+exit 1
+SH
+  chmod +x "$fakebin/herdr"
+}
+
+# The digest's Claude posture read is bounded and evidence-based: across the
+# whole fleet only the live Claude endpoint whose record carries its launch's
+# permission mode costs one `pane process-info` read on top of its presence
+# check (no `agent get`, no full classification); a record without a recorded
+# mode, or on another harness, gets its presence check only and is never
+# judged against the current config; and a restored argv missing the recorded
+# flag is reported as drift while a conforming one stays alive.
+test_endpoint_claude_posture_read_is_bounded_and_recorded() {
+  local rec root home fakebin out log
+  rec=$(new_world liveness-herdr-posture)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_herdr_claude_posture "$fakebin" "p-live" '["claude","--resume","session-123"]'
+  log="$home/herdr-calls.log"; : > "$log"
+  mkdir -p "$home/config"
+  printf 'auto\n' > "$home/config/claude-permission-mode"
+
+  printf 'window=sess:p-live\nkind=ship\nbackend=herdr\nharness=claude\nclaude_permission_mode=bypass\n' > "$home/state/task-recorded.meta"
+  printf 'window=sess:p-live\nkind=ship\nbackend=herdr\nharness=claude\n' > "$home/state/task-unrecorded.meta"
+  printf 'window=sess:p-live\nkind=ship\nbackend=herdr\nharness=codex\n' > "$home/state/task-codex.meta"
+
+  out=$(FM_FAKE_HERDR_LOG="$log" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "endpoint: permission-drift (Claude process lacks the bypass permission posture its launch recorded; relaunch in place; backend=herdr window=sess:p-live)" \
+    "a restored Claude missing its recorded bypass flag was not reported as drift"
+  assert_not_contains "$out" "endpoint: permission-drift (Claude process lacks the auto" \
+    "the digest judged posture against the current config instead of the recorded launch"
+  [ "$(grep -c 'pane process-info' "$log")" = 1 ] \
+    || fail "the digest must read posture exactly once, only for the recorded Claude endpoint: $(grep -c 'pane process-info' "$log") reads"
+  ! grep -q 'agent get' "$log" \
+    || fail "the digest must not run a full agent classification per endpoint"
+
+  make_fake_herdr_claude_posture "$fakebin" "p-live" '["claude","--dangerously-skip-permissions"]'
+  out=$(FM_FAKE_HERDR_LOG="$log" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "endpoint: alive (backend=herdr window=sess:p-live)" \
+    "a live Claude carrying its recorded bypass flag must read alive"
+  assert_not_contains "$out" "permission-drift" \
+    "a conforming Claude process was reported as drift"
+
+  pass "session-start reads Claude posture once per recorded endpoint from the process snapshot and judges it against the recorded launch"
+}
+
 # --- composition: real scripts run, not reimplemented ------------------------
 
 test_composition_invokes_real_scripts() {
@@ -2694,6 +2774,7 @@ test_status_tail_line_cap
 test_orphan_status_logs_are_printed
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
+test_endpoint_claude_posture_read_is_bounded_and_recorded
 test_composition_invokes_real_scripts
 test_branch_outcome_replay_respects_captain_barrier_and_lease_sweep
 test_non_pi_session_start_leaves_branch_state_untouched

@@ -9,12 +9,20 @@
 # fm_claude_permission_flag renders the launch flag every spawn and relaunch
 # must carry.
 #
+# The mode a launch actually carried is the expectation a later process is
+# judged against, never the mutable current config: bin/fm-spawn.sh records it
+# in the task record as claude_permission_mode= on every Claude spawn and
+# relaunch, so editing the config file changes only the next Firstmate-owned
+# launch and never turns a correctly launched running worker into drift.
+#
 # A terminal provider may restore a Claude session itself instead of replaying
 # Firstmate's launch command.
 # fm_claude_argv_permission_state checks one exact argv array from that running
-# process as conforming|drifted|ambiguous|unreadable.
+# process against the recorded mode as conforming|drifted|ambiguous|unreadable.
 # Flattened command text is deliberately not accepted because a worker prompt
-# may itself mention either permission flag and create false evidence.
+# may itself mention either permission flag and create false evidence, and an
+# unreadable read is an observability gap the recovery-grade callers never
+# treat as drift.
 #
 # This posture grants command autonomy only inside the worker.
 # It does not grant merge authority or permission for destructive,
@@ -65,27 +73,23 @@ fm_claude_permission_flag() {  # <bypass|auto>
 # Claude's packaged executable may expose either a claude-named kernel process
 # or a claude-named argv[0] path, so either exact identity surface is enough.
 #
-# The name must BE the executable's own name, never merely contain `claude`,
-# because this attribution is what licenses stopping and replacing a live
-# worker: a claude-NAMED script a healthy worker runs in its own pane
-# (bin/fm-claude-trust.sh, tests/fm-claude-*.test.sh - a shebang exec puts that
-# path in argv[0]) must never be attributed as the Claude process itself.
-# Anchoring at the start excludes every `fm-claude-*` tool in this repo, and
-# the script suffixes excluded below cover a claude-prefixed wrapper script.
-# Claude's own identity is the bare launcher name (verified shape on Herdr:
-# kernel name `node` with argv[0] `claude`, the same shape Pi presents -
-# docs/verification/runtime-backends.md "Stale agent registration"). A name
-# this rejects attributes no process at all, which is `unobserved` - the
-# fail-safe direction, never drift.
+# The name must BE the executable's own name, exactly `claude`, because this
+# attribution is what licenses stopping and replacing a live worker: a
+# claude-NAMED script or helper a healthy worker runs in its own pane
+# (bin/fm-claude-trust.sh, tests/fm-claude-*.test.sh, a `claude-usage` helper -
+# a shebang exec puts that path in argv[0]) must never be attributed as the
+# Claude process itself. Claude's own identity is the bare launcher name
+# (verified shape on Herdr: kernel name `node` with argv[0] `claude`, the same
+# shape Pi presents - docs/verification/runtime-backends.md "Stale agent
+# registration"); no versioned or prefixed launcher name has been observed, so
+# none is accepted. A name this rejects attributes no process at all, which is
+# `unobserved` - the fail-safe direction, never drift.
 fm_claude_process_matches() {  # <name> <argv0>
   local name=${1:-} argv0=${2:-} base
   for base in "$name" "$argv0"; do
     base=${base##*/}
     base=${base#-}
-    case "$base" in
-      *.sh|*.bash|*.zsh|*.py|*.rb|*.pl) continue ;;
-      claude|claude-*) return 0 ;;
-    esac
+    [ "$base" != claude ] || return 0
   done
   return 1
 }

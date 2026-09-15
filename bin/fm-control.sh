@@ -84,8 +84,8 @@
 #     than reported as successful blind.
 #   - An ambiguous or unreadable endpoint state refuses. A policy-aware
 #     `permission-drift` state is one positively attributed live Claude process
-#     whose runtime-restored command omitted this home's selected unattended
-#     flag; `relaunch` may stop and replace only that exact process through the
+#     whose exact argv lacks the permission posture its launch recorded;
+#     `relaunch` may stop and replace only that exact process through the
 #     same transaction as any ordinary live agent.
 #   - A composer that visibly holds pending text refuses before an exit command
 #     is typed, so existing text is preserved instead of being concatenated.
@@ -321,7 +321,7 @@ fm_backend_validate "$BACKEND" || exit 1
 # --- shared helpers ---------------------------------------------------------
 
 agent_state() {
-  fm_backend_agent_state_for_meta "$META" "$FM_BACKEND_CONFIG_DIR"
+  fm_backend_agent_state_for_meta "$META"
 }
 
 busy_verdict() {
