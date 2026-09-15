@@ -1548,6 +1548,10 @@ families_for_changed_path() {
     .agents/skills/*/SKILL.md)
       printf '%s\n' pure-contract-unit
       ;;
+    .agents/skills/*/LICENSE)
+      # A skill's license text is documentation, not behavior: nothing
+      # executable reads it, so it selects no suite, like the top-level LICENSE.
+      ;;
     .github/workflows/ci.yml|.no-mistakes.yaml)
       printf '%s\n' pure-contract-unit
       printf '%s\n' real-herdr-gated

@@ -161,6 +161,7 @@ init_changed_fixture_repo() {
     "$repo/.agents/skills/harness-adapters/references/common" \
     "$repo/.claude" "$repo/.pi/extensions" "$repo/docs" "$repo/src"
   : >"$repo/.agents/skills/example/SKILL.md"
+  : >"$repo/.agents/skills/example/LICENSE"
   : >"$repo/.agents/skills/harness-adapters/SKILL.md"
   : >"$repo/.agents/skills/harness-adapters/references/common/dispatch.md"
   : >"$repo/.claude/settings.json"
@@ -353,6 +354,15 @@ test_changed_dependency_selection_and_unmapped_failure() {
     "turn-end extension selects native-Windows shell coverage"
   git -C "$repo" add .agents .claude .pi
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm non-bin-source-change
+
+  # A skill ships its license beside SKILL.md; the text is documentation with
+  # no executable reader, so a change to it must select nothing rather than
+  # refuse the whole selection as an unmapped source.
+  printf '\n' >>"$repo/.agents/skills/example/LICENSE"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
+  [ -z "$listed" ] || fail "a skill license change selected tests: $listed"
+  git -C "$repo" add .agents/skills/example/LICENSE
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm skill-license-change
 
   printf '\n' >>"$repo/.pi/extensions/lib/fm-operational-input.ts"
   listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
