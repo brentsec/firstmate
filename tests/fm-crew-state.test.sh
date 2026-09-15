@@ -158,7 +158,8 @@ case "${1:-}" in
         # `agent` puts a conforming live claude in the foreground, `restored`
         # puts Herdr's native claude --resume shape there without Firstmate's
         # permission flag, `nested` puts a conforming worker there with a
-        # claude --resume child it runs itself (never the worker), `shell` a
+        # claude --resume child it runs itself (never the worker), `both` puts
+        # a top-level worker carrying both permission flags there, `shell` a
         # bare zsh whose pid is the test script itself (a real, long-lived
         # process with no harness descendant, so the adapter's real
         # process-table walk finds it), and anything else answers nothing.
@@ -167,6 +168,7 @@ case "${1:-}" in
           agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           restored) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           nested) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]},{"pid":424243,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          both) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           shell) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":%s,"foreground_processes":[{"pid":%s,"name":"zsh","argv0":"zsh","argv":["-zsh"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
         esac
         exit 0 ;;
@@ -1527,6 +1529,40 @@ test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live() {
   pass "fm-crew-state never attributes a nested claude CLI as the worker"
 }
 
+# A top-level worker carrying both permission flags cannot be attributed to
+# either posture. Startup, monitoring, and control all refuse it and ask for
+# reconciliation, so the targeted reader the recovery skill sends the captain
+# to must say the same thing instead of printing an ordinary live reading.
+test_no_run_herdr_claude_with_both_permission_flags_reports_ambiguous() {
+  command -v jq >/dev/null 2>&1 || { pass "Herdr ambiguous-posture test skipped without jq"; return; }
+  reset_fakes
+  local d; d=$(new_case herdr-ambiguous-claude)
+  make_repo_on_branch "$d/wt" fm/feat-herdr-ambiguous
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-herdr-ambiguous.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
+    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
+  printf 'working: implementing\n' > "$d/state/feat-herdr-ambiguous.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  FM_FAKE_TMUX_MISSING=1
+  FM_FAKE_HERDR_AGENT_STATUS=idle
+  FM_FAKE_HERDR_BUSY=0
+  FM_FAKE_HERDR_PROCESS=both
+  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-ambiguous)
+  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-ambiguous idle --gen "$gen" \
+    --source claude-hook --event stop
+  local out; out=$(run_crew_state "$d" feat-herdr-ambiguous)
+  assert_contains "$out" "state: unknown" \
+    "an unattributable permission posture must not read as an ordinary live state"
+  assert_contains "$out" "carries both permission flags" \
+    "the targeted reader must name why the posture cannot be attributed"
+  assert_contains "$out" "reconcile the endpoint before any lifecycle action" \
+    "the targeted reader must use the same reconcile wording as startup, monitoring, and control"
+  assert_not_contains "$out" "source: status-log" \
+    "an ambiguous posture must not fall through to the ordinary status-log reading"
+  pass "fm-crew-state reports an ambiguous Claude permission posture instead of discarding it"
+}
+
 test_no_run_herdr_unknown_uses_backend_capture() {
   command -v jq >/dev/null 2>&1 || { pass "herdr pane fallback skipped without jq"; return; }
   reset_fakes
@@ -2618,6 +2654,7 @@ test_no_run_grok_uses_isolated_fallback
 test_no_run_herdr_restored_claude_without_bypass_is_not_alive
 test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live
 test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live
+test_no_run_herdr_claude_with_both_permission_flags_reports_ambiguous
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
 test_no_run_herdr_alive_with_failed_read_stays_live

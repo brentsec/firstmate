@@ -795,6 +795,9 @@ case "$TASK_BACKEND:$HARNESS:$CLAUDE_MODE" in
       permission-drift)
         emit unknown none "Claude process lacks the permission posture its launch recorded; relaunch in place"
         ;;
+      ambiguous)
+        emit unknown none "the top-level Claude process carries both permission flags; reconcile the endpoint before any lifecycle action"
+        ;;
     esac
     ;;
 esac

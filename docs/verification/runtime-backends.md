@@ -1275,6 +1275,12 @@ Stopping that restored process and adding only `--dangerously-skip-permissions` 
 The public state reader then detected a second native restoration instead of trusting process existence, and the public relaunch reused the exact recorded endpoint and isolated copy while returning the worker to visible bypass mode without human input.
 The portable regressions require exact argv arrays, reject flattened prompt text as flag evidence, attribute only the pane's top-level worker so that a nested `claude` command the worker runs is neither drift nor ambiguity, and refuse one top-level process carrying both permission flags rather than stopping it.
 
+**This dated run predates the top-level-worker attribution anchor and requires remeasurement.**
+The 2026-09-13 output above was produced while the classifier attributed the posture to any foreground process named `claude`; it now attributes only the foreground process whose pid equals `.result.process_info.foreground_process_group_id`, which is a new hard dependency on that protocol field carrying the restored Claude's own pid.
+Every portable fixture supplies that field itself, so no portable test can detect a disagreement with what real Herdr reports, and the field is not universal: the Windows spike records a host where `process-info` works but exposes no `foreground_process_group_id` (`.github/workflows/windows-herdr-spike.yml`).
+A build that omits or contradicts it reads `unreadable`, which keeps a proven-live endpoint alive and silently no-ops drift detection rather than misreporting it - the fail-safe direction, but also the reason a real mismatch would surface nowhere except this guard.
+Re-run the opt-in command above against real Herdr and refresh the date, version, and observed output before trusting this section for the current classifier.
+
 Every Firstmate-owned initial, same-task, local recovery, and remote secondmate relaunch still reaches the same launch template in `bin/fm-spawn.sh`; the restoration-specific reconciliation changes only the Herdr Claude path.
 Tmux performs no native agent restoration through Firstmate and remains covered by the same launch-template and relaunch regressions.
 Zellij, Orca, and cmux still have no recovery-grade relaunch classifier, so their existing recovery refusals are unchanged rather than being widened by this result.
