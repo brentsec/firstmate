@@ -188,42 +188,60 @@ size_of() { LC_ALL=C wc -c < "$1" | tr -d '[:space:]'; }
 # briefly holding the pane) keeps the marker so the same unfixed drift does not
 # re-wake at every tool boundary, only a `conforming` observation clears that
 # episode, and an ambiguous attribution surfaces as ambiguity rather than
-# authorizing lifecycle work.
+# authorizing lifecycle work. The poll is also two-stage: every poll pays the
+# bounded posture read, and only suspicious narrow evidence may escalate to the
+# recovery-grade classification that resamples the pane.
 test_claude_permission_drift_wake_dedupes_and_rearms() {
-  local dir state log verdict window key count
+  local dir state log verdict escalations window key count
   dir=$(make_case claude-permission-drift); state="$dir/state"
-  log="$dir/wakes.log"; verdict="$dir/verdict"; window="lab:w1:p1"
+  log="$dir/wakes.log"; verdict="$dir/verdict"; escalations="$dir/escalations"
+  window="lab:w1:p1"
   printf 'window=%s\nbackend=herdr\nharness=claude\nkind=secondmate\nspawn_gen=g7\nclaude_permission_mode=bypass\n' "$window" \
     > "$state/claude-mate.meta"
-  printf 'permission-drift\tdrifted\n' > "$verdict"
+  # Line 1 is the bounded posture read every poll pays; line 2 is the
+  # recovery-grade classification only a suspicious posture may escalate to.
+  printf 'drifted\npermission-drift\tdrifted\n' > "$verdict"
+  : > "$escalations"
 
   FM_STATE_OVERRIDE="$state" \
     FM_TEST_PERMISSION_VERDICT="$verdict" FM_TEST_PERMISSION_WAKE_LOG="$log" \
+    FM_TEST_PERMISSION_ESCALATIONS="$escalations" \
     bash -c '
       . "$1"
-      fm_backend_agent_state_detail_for_meta() { tr -d "\n" < "$FM_TEST_PERMISSION_VERDICT"; }
+      fm_backend_claude_permission_posture_for_meta() {
+        sed -n 1p "$FM_TEST_PERMISSION_VERDICT" | tr -d "\n"
+      }
+      fm_backend_agent_state_detail_for_meta() {
+        printf "escalated\n" >> "$FM_TEST_PERMISSION_ESCALATIONS"
+        sed -n 2p "$FM_TEST_PERMISSION_VERDICT" | tr -d "\n"
+      }
       fm_wake_append() { printf "%s|%s|%s\n" "$1" "$2" "$3" >> "$FM_TEST_PERMISSION_WAKE_LOG"; }
       wake() { :; }
       key=$(window_key "$2")
       claude_permission_posture_check "$2" claude-mate "$key"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "alive\tunobserved\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "unobserved\nalive\tunobserved\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
       [ -e "$STATE/.claude-permission-$key" ] || exit 22
-      printf "permission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "drifted\npermission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "alive\tconforming\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "conforming\nalive\tconforming\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
       [ ! -e "$STATE/.claude-permission-$key" ] || exit 21
-      printf "permission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "drifted\npermission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "ambiguous\tambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "ambiguous\nambiguous\tambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
     ' _ "$WATCH" "$window" || fail "Claude permission-drift watcher exercise failed (rc $?)"
 
   count=$(LC_ALL=C wc -l < "$log" | tr -d '[:space:]')
   [ "$count" = 3 ] \
     || fail "permission drift should wake once per episode plus one ambiguity, got $count records"
+  # Seven polls: the conforming and unobserved ones must settle on the bounded
+  # read alone, so exactly the five suspicious ones may resample the pane.
+  count=$(LC_ALL=C wc -l < "$escalations" | tr -d '[:space:]')
+  [ "$count" = 5 ] \
+    || fail "only a suspicious posture may pay the recovery-grade classification, got $count of 7 polls"
   [ "$(grep -c 'lacks the bypass permission posture its launch recorded' "$log")" = 2 ] \
     || fail "permission drift did not re-arm exactly once after a conforming observation"
   assert_contains "$(tail -1 "$log")" "more than one foreground Claude process, or one process carrying both permission flags" \

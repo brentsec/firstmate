@@ -153,8 +153,11 @@ resolve_remote_transport() { # <id>
     set_transport deferred 'remote endpoint probe failed'
     return 0
   fi
+  # The remote verb reports the recovery-grade state, whose permission-drift is
+  # a live, steerable agent in the compatibility view the local leg above reads
+  # through fm_backend_agent_state. Accepting it keeps both legs on one contract.
   case "$(tail -1 "$STEP_OUT")" in
-    alive) set_transport agent ;;
+    alive|permission-drift) set_transport agent ;;
     *) set_transport deferred 'no live agent and no remote memory write path' ;;
   esac
 }

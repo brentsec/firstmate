@@ -248,6 +248,18 @@ test_transport_routes_by_placement_and_liveness() {
     || fail "a remote home with no live agent was not deferred: $(value_in "$s" transport)"
   assert_contains "$s" 'no remote memory write path' \
     "the deferred remote home did not state why it cannot be curated in place"
+
+  # The remote verb reports the recovery-grade state, whose permission-drift is
+  # a live, steerable agent - the local leg reads the compatibility view, where
+  # that same process is plain alive - so it must reach the agent, not defer.
+  set +e
+  out=$(run_cascade "$primary" \
+    FM_FAKE_TMUX_WINDOW='fm-live-local' \
+    FM_FAKE_REMOTE_BUDGET="$TMP_ROOT/remote-budget.txt" \
+    FM_FAKE_REMOTE_AGENT_STATE=permission-drift)
+  set -e
+  [ "$(value_in "$(stanza "$out" remote-live)" transport)" = agent ] \
+    || fail "a live remote agent with permission drift was not routed to that agent"
   pass "transport follows placement and live-agent state, and a remote home without an agent defers"
 }
 

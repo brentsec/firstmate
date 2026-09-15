@@ -179,6 +179,17 @@ cmd_launch() {
         print_route "$id"
         return 0
         ;;
+      permission-drift)
+        # Conclusive argv evidence that the one attributed Claude process lost
+        # the posture its launch recorded. That is not a duplicate to refuse: it
+        # is the exact condition the relaunch verb below exists to repair, and
+        # bin/fm-bootstrap.sh already routes the remote sweep's copy of this
+        # state there. Ambiguity and every inconclusive read still refuse.
+        cmd_relaunch "$id" "$harness" "$model" "$effort" \
+          || die "remote endpoint lost its recorded permission posture and the safe relaunch failed"
+        print_route "$id"
+        return 0
+        ;;
       dead)
         fm_backend_kill "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null \
           || die "could not remove the confirmed agent-less endpoint"

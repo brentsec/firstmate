@@ -2243,7 +2243,7 @@ EOF
 # validated process snapshot its liveness verdict rested on, it passes that
 # file and no second `pane process-info` round-trip is made.
 fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto> [snapshot-file]
-  local session=$1 pane_id=$2 mode=$3 snapshot=${4:-} info rows first=1
+  local session=$1 pane_id=$2 mode=$3 snapshot=${4:-} info rows first=1 line rest
   local idx name argv0 argv_state argv matches=0 matched_index='' matched_state=''
   case "$mode" in bypass|auto) ;; *) printf 'unreadable'; return 0 ;; esac
   command -v jq >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
@@ -2279,12 +2279,19 @@ fm_backend_herdr_claude_permission_state() {  # <session> <pane_id> <bypass|auto
        | @tsv)
     else empty
     end' 2>/dev/null) || { printf 'unreadable'; return 0; }
-  while IFS=$'\t' read -r idx name argv0 argv_state; do
+  while IFS= read -r line; do
     if [ "$first" = 1 ]; then
       first=0
-      [ "$idx" = ok ] || { printf 'unreadable'; return 0; }
+      [ "$line" = ok ] || { printf 'unreadable'; return 0; }
       continue
     fi
+    # @tsv guarantees exactly three tabs and escapes any inside a field, so
+    # split on them by expansion: `IFS=$'\t' read` is IFS-whitespace and would
+    # collapse an empty `name`, shifting argv0 and argv_state a column left.
+    idx=${line%%$'\t'*}; rest=${line#*$'\t'}
+    name=${rest%%$'\t'*}; rest=${rest#*$'\t'}
+    argv0=${rest%%$'\t'*}
+    argv_state=${rest#*$'\t'}
     if fm_claude_process_matches "$name" "$argv0"; then
       matches=$((matches + 1))
       if [ "$matches" -eq 1 ]; then

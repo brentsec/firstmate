@@ -443,6 +443,7 @@ claude_permission_state_case() {  # <mode> <foreground-json> [with-policy]
 
 test_restored_claude_permission_posture_is_recovery_grade() {
   local bypass auto auto_equals restored conflicting malformed duplicate tool prompt_mentions_flag generic
+  local unnamed_restored unnamed_conforming
   bypass=$(claude_permission_state_case bypass \
     '[{"name":"node","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]')
   auto=$(claude_permission_state_case auto \
@@ -463,8 +464,20 @@ test_restored_claude_permission_posture_is_recovery_grade() {
     '[{"name":"git","argv0":"git","argv":["git","status"]}]')
   generic=$(claude_permission_state_case bypass \
     '[{"name":"claude","argv":["claude","--resume","session-123"]}]' no)
+  # A foreground entry carrying no `name` at all: the projected row's middle
+  # column is empty, and a splitter that drops empty fields shifts argv0 and
+  # the argv-shape column one place left, so a genuine restored worker reads
+  # as an unreadable argv and its drift disappears behind the live verdict.
+  unnamed_restored=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"argv":["claude","--resume","session-123"]}]')
+  unnamed_conforming=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"argv":["claude","--dangerously-skip-permissions"]}]')
 
   [ "$bypass" = alive ] || fail "an initial bypass launch should be alive, got '$bypass'"
+  [ "$unnamed_restored" = permission-drift ] \
+    || fail "a restored worker whose foreground entry reports no name must still read drift, got '$unnamed_restored'"
+  [ "$unnamed_conforming" = alive ] \
+    || fail "a conforming worker whose foreground entry reports no name must stay alive, got '$unnamed_conforming'"
   [ "$auto" = alive ] || fail "an explicit auto launch should be alive, got '$auto'"
   [ "$auto_equals" = alive ] || fail "an explicit --permission-mode=auto launch should be alive, got '$auto_equals'"
   [ "$restored" = permission-drift ] \

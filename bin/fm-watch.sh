@@ -415,6 +415,14 @@ window_key() {  # <window>
 # holds the pane's foreground, proves nothing either way and keeps the marker,
 # so an unfixed drift is reported once per episode rather than at every tool
 # boundary.
+#
+# The ordinary poll pays only the bounded posture read: one `pane process-info`
+# with no retries, no registration read, and no process-table walk. A healthy
+# worker and a worker whose tool holds the foreground both settle there. Only
+# suspicious narrow evidence - `drifted` or `ambiguous` argv - escalates to the
+# recovery-grade classification that resamples the pane, because only that
+# verdict may name an endpoint stale, and it is also what proves an endpoint
+# that vanished between the two reads is dead or missing rather than drifted.
 claude_permission_posture_check() {  # <window> <task> <marker-key>
   local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen detail state posture marker signature reason
   [ -n "$task" ] || return 0
@@ -425,11 +433,17 @@ claude_permission_posture_check() {  # <window> <task> <marker-key>
   case "$backend:$harness" in herdr:claude*) ;; *) return 0 ;; esac
   mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
   case "$mode" in bypass|auto) ;; *) return 0 ;; esac
+  marker="$STATE/.claude-permission-$key"
+  posture=$(fm_backend_claude_permission_posture_for_meta "$meta" 2>/dev/null || printf 'unreadable')
+  case "$posture" in
+    conforming) rm -f "$marker"; return 0 ;;
+    drifted|ambiguous) ;;
+    *) return 0 ;;
+  esac
   spawn_gen=$(fm_backend_meta_exact_value "$meta" spawn_gen 2>/dev/null || true)
   detail=$(fm_backend_agent_state_detail_for_meta "$meta" 2>/dev/null || printf 'unreadable\t')
   state=${detail%%$'\t'*}
   posture=${detail#*$'\t'}
-  marker="$STATE/.claude-permission-$key"
   signature="${spawn_gen:-legacy}:$mode:$state"
   case "$state" in
     permission-drift)

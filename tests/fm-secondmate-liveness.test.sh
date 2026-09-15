@@ -622,6 +622,61 @@ EOF
   pass "remote sweep: one drifted Claude relaunches in place while ambiguity refuses lifecycle work"
 }
 
+# The captain's documented remote recovery entry point is fm-spawn --secondmate,
+# which reaches the host-local `launch` verb. Now that verb resolves the
+# recovery-grade state, a restored Claude that lost its recorded posture arrives
+# as permission-drift. That is one attributed process, not a duplicate to refuse:
+# it is exactly what the sibling relaunch verb repairs, so launch must route it
+# there. Ambiguity - which licenses no lifecycle action anywhere - still refuses.
+#
+# The control script's own dispatch is executed; only the backend verdict and the
+# replacement leg are replaced, so the routing decision under test is the real one.
+test_remote_launch_recovers_permission_drift_and_still_refuses_ambiguity() {
+  local w home log outfile out rc
+  w=$(new_world remote-launch-drift)
+  home="$w/remote-home"
+  mkdir -p "$home/bin" "$home/state/parent-route"
+  printf 'sm1\n' > "$home/.fm-secondmate-home"
+  printf '# Firstmate\n' > "$home/AGENTS.md"
+  : > "$home/state/parent-route/sm1.meta"
+  log="$w/relaunch.log"; : > "$log"
+  outfile="$w/launch.out"
+
+  # Not a command substitution: the exit status of the launch under test is the
+  # assertion, and a subshell would not carry it back.
+  exercise_remote_launch() {  # <state>; writes $outfile, sets rc
+    rc=0
+    FM_HOME="$home" FM_TEST_STATE="$1" FM_TEST_RELAUNCH_LOG="$log" bash -c '
+      . "$1" state sm1 >/dev/null 2>&1
+      fm_backend_agent_state_for_meta() { printf "%s" "$FM_TEST_STATE"; }
+      remote_endpoint_require() { REMOTE_ENDPOINT_META="$FM_HOME/state/parent-route/$1.meta"; }
+      cmd_relaunch() { printf "relaunch %s\n" "$*" >> "$FM_TEST_RELAUNCH_LOG"; }
+      print_route() { printf "route=%s\n" "$1"; }
+      cmd_launch sm1 claude - - herdr
+    ' _ "$ROOT/bin/fm-remote-secondmate-control.sh" > "$outfile" 2>&1 || rc=$?
+    out=$(cat "$outfile")
+  }
+
+  exercise_remote_launch permission-drift
+  [ "$rc" = 0 ] || fail "a drifted remote mate must be recovered, not refused (rc $rc): $out"
+  assert_contains "$(cat "$log")" "relaunch sm1 claude - -" \
+    "remote launch did not route permission drift through the relaunch verb"
+  assert_contains "$out" "route=sm1" "a recovered remote launch did not print its route"
+
+  : > "$log"
+  exercise_remote_launch ambiguous
+  [ "$rc" != 0 ] || fail "an ambiguous remote endpoint must refuse the launch: $out"
+  [ ! -s "$log" ] || fail "remote ambiguity triggered a relaunch: $(cat "$log")"
+
+  : > "$log"
+  exercise_remote_launch unreadable
+  [ "$rc" != 0 ] || fail "an unreadable remote endpoint must refuse the launch: $out"
+  [ ! -s "$log" ] || fail "an unreadable remote endpoint triggered a relaunch: $(cat "$log")"
+
+  unset -f exercise_remote_launch
+  pass "remote launch: proven permission drift recovers through relaunch while ambiguity and unreadability refuse"
+}
+
 test_sweep_respawns_authoritatively_missing_pi_secondmate() {
   local w fb tmuxfb log out
   w=$(new_world sweep-missing-pi)
@@ -783,6 +838,7 @@ test_sweep_refuses_ambiguous_restored_claude_processes
 test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit
 test_sweep_needs_a_recorded_posture_before_calling_drift
 test_remote_sweep_relaunches_drift_and_refuses_ambiguity
+test_remote_launch_recovers_permission_drift_and_still_refuses_ambiguity
 test_sweep_respawns_authoritatively_missing_pi_secondmate
 test_sweep_respawns_authoritatively_missing_pi_signed_secondmate
 test_sweep_never_acts_on_ambiguous_existing_process
