@@ -532,12 +532,12 @@ test_recorded_launch_posture_decides_drift_and_unreadable_reads_stay_alive() {
 
 # The liveness verdict and the posture read share ONE `pane process-info`
 # snapshot: the recovery-grade classifier must not pay a second round-trip per
-# Claude endpoint, and the posture it reports is the one the liveness verdict
-# rested on.
+# Claude endpoint, and the drift verdict it reports is the one the liveness
+# verdict rested on.
 test_policy_read_reuses_the_liveness_process_snapshot() {
-  local log="$TMP_ROOT/snapshot-calls.log" detail state posture calls
+  local log="$TMP_ROOT/snapshot-calls.log" state calls
   : > "$log"
-  detail=$(FM_TEST_CALL_LOG="$log" bash -c '. "$0/bin/backends/herdr.sh"
+  state=$(FM_TEST_CALL_LOG="$log" bash -c '. "$0/bin/backends/herdr.sh"
       fm_backend_herdr_cli() {
         printf "%s\n" "$*" >> "$FM_TEST_CALL_LOG"
         case "$2 $3" in
@@ -547,17 +547,13 @@ test_policy_read_reuses_the_liveness_process_snapshot() {
           *) return 1 ;;
         esac
       }
-      fm_backend_herdr_agent_state_detail fmtest:w1:p2 claude bypass' "$ROOT")
-  state=${detail%%$'\t'*}
-  posture=${detail#*$'\t'}
+      fm_backend_herdr_agent_state fmtest:w1:p2 claude bypass' "$ROOT")
   calls=$(grep -c 'pane process-info' "$log" || true)
   [ "$state" = permission-drift ] \
     || fail "a restored claude --resume must read as drift against a recorded bypass launch, got '$state'"
-  [ "$posture" = drifted ] \
-    || fail "the detail view must carry the posture the verdict rested on, got '$posture'"
   [ "$calls" = 1 ] \
     || fail "the posture read must reuse the liveness snapshot instead of a second process-info call, got $calls calls"
-  pass "Herdr policy read reuses the one liveness process snapshot and reports its posture"
+  pass "Herdr policy read reuses the one liveness process snapshot for its drift verdict"
 }
 
 # A worker running one of this repo's own claude-NAMED tools, or an

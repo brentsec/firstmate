@@ -2454,11 +2454,6 @@ fm_backend_herdr_server_running_state() {  # <session>
 # is not treated as proof of a valid worker launch, and only conclusive argv
 # evidence licenses replacing one.
 #
-# fm_backend_herdr_agent_state_detail prints the state and, tab-separated, the
-# posture that produced it (empty without a Claude policy read), so a caller
-# such as the watcher's dedupe can tell a `conforming` observation from an
-# `unobserved` one without a second round-trip.
-#
 # One exception to that last case, and it is deliberately made HERE rather than
 # in the husk classifier: a read can fail because the recorded session's server
 # is not running at all, which is authoritative absence for every pane in that
@@ -2472,9 +2467,9 @@ fm_backend_herdr_server_running_state() {  # <session>
 # on exactly the reads they refused on before. A server that is running, or
 # whose state cannot itself be read, still yields `unreadable` here too: absence
 # is claimed only from positive evidence of it.
-fm_backend_herdr_agent_state_detail() {  # <target> [expected-harness] [claude-mode] -> "<state>\t<posture>"
+fm_backend_herdr_agent_state() {  # <target> [expected-harness] [claude-mode]
   local target=$1 expected_harness=${2:-} claude_mode=${3:-} snapshot='' pane_state posture=''
-  fm_backend_herdr_parse_target "$target" || { printf 'unreadable\t'; return 0; }
+  fm_backend_herdr_parse_target "$target" || { printf 'unreadable'; return 0; }
   if [ "$expected_harness" = claude ] && [ -n "$claude_mode" ]; then
     snapshot=$(mktemp "${TMPDIR:-/tmp}/fm-herdr-snapshot.XXXXXX" 2>/dev/null) || snapshot=''
   fi
@@ -2503,14 +2498,7 @@ fm_backend_herdr_agent_state_detail() {  # <target> [expected-harness] [claude-m
       esac
       ;;
   esac
-  printf '\t%s' "$posture"
   [ -z "$snapshot" ] || rm -f "$snapshot"
-}
-
-fm_backend_herdr_agent_state() {  # <target> [expected-harness] [claude-mode]
-  local detail
-  detail=$(fm_backend_herdr_agent_state_detail "$@")
-  printf '%s' "${detail%%$'\t'*}"
 }
 
 # Backward-compatible three-state view for callers that only need a yes/no

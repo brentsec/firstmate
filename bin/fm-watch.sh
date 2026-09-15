@@ -410,11 +410,14 @@ window_key() {  # <window>
 # recovery; an ambiguous attribution (more than one foreground Claude process,
 # or one carrying both flags) is reported and never acted on automatically. A
 # generation-and-mode signature suppresses repeats of the same finding and is
-# cleared only by positive evidence: a `conforming` posture read, or an
-# endpoint proven dead or missing. An `unobserved` poll, when a tool briefly
-# holds the pane's foreground, proves nothing either way and keeps the marker,
-# so an unfixed drift is reported once per episode rather than at every tool
-# boundary.
+# cleared by a `conforming` bounded posture read, and by a dead-or-missing
+# verdict only in the narrow case where the endpoint vanishes between the
+# bounded read and the escalation below. An `unobserved` poll, when a tool
+# briefly holds the pane's foreground, proves nothing either way and keeps the
+# marker, so an unfixed drift is reported once per episode rather than at every
+# tool boundary. A marker left behind by an endpoint that disappeared silently
+# suppresses nothing later: the signature carries spawn_gen, which every
+# Firstmate-owned spawn or relaunch rewrites.
 #
 # The ordinary poll pays only the bounded posture read: one `pane process-info`
 # with no retries, no registration read, and no process-table walk. A healthy
@@ -424,7 +427,7 @@ window_key() {  # <window>
 # verdict may name an endpoint stale, and it is also what proves an endpoint
 # that vanished between the two reads is dead or missing rather than drifted.
 claude_permission_posture_check() {  # <window> <task> <marker-key>
-  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen detail state posture marker signature reason
+  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen state posture marker signature reason
   [ -n "$task" ] || return 0
   meta="$STATE/$task.meta"
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
@@ -441,9 +444,7 @@ claude_permission_posture_check() {  # <window> <task> <marker-key>
     *) return 0 ;;
   esac
   spawn_gen=$(fm_backend_meta_exact_value "$meta" spawn_gen 2>/dev/null || true)
-  detail=$(fm_backend_agent_state_detail_for_meta "$meta" 2>/dev/null || printf 'unreadable\t')
-  state=${detail%%$'\t'*}
-  posture=${detail#*$'\t'}
+  state=$(fm_backend_agent_state_for_meta "$meta" 2>/dev/null || printf 'unreadable')
   signature="${spawn_gen:-legacy}:$mode:$state"
   case "$state" in
     permission-drift)
@@ -454,10 +455,6 @@ claude_permission_posture_check() {  # <window> <task> <marker-key>
       ;;
     dead|missing)
       rm -f "$marker"
-      return 0
-      ;;
-    alive)
-      [ "$posture" != conforming ] || rm -f "$marker"
       return 0
       ;;
     *) return 0 ;;

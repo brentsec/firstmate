@@ -200,7 +200,7 @@ test_claude_permission_drift_wake_dedupes_and_rearms() {
     > "$state/claude-mate.meta"
   # Line 1 is the bounded posture read every poll pays; line 2 is the
   # recovery-grade classification only a suspicious posture may escalate to.
-  printf 'drifted\npermission-drift\tdrifted\n' > "$verdict"
+  printf 'drifted\npermission-drift\n' > "$verdict"
   : > "$escalations"
 
   FM_STATE_OVERRIDE="$state" \
@@ -211,7 +211,7 @@ test_claude_permission_drift_wake_dedupes_and_rearms() {
       fm_backend_claude_permission_posture_for_meta() {
         sed -n 1p "$FM_TEST_PERMISSION_VERDICT" | tr -d "\n"
       }
-      fm_backend_agent_state_detail_for_meta() {
+      fm_backend_agent_state_for_meta() {
         printf "escalated\n" >> "$FM_TEST_PERMISSION_ESCALATIONS"
         sed -n 2p "$FM_TEST_PERMISSION_VERDICT" | tr -d "\n"
       }
@@ -220,17 +220,17 @@ test_claude_permission_drift_wake_dedupes_and_rearms() {
       key=$(window_key "$2")
       claude_permission_posture_check "$2" claude-mate "$key"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "unobserved\nalive\tunobserved\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "unobserved\nalive\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
       [ -e "$STATE/.claude-permission-$key" ] || exit 22
-      printf "drifted\npermission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "drifted\npermission-drift\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "conforming\nalive\tconforming\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "conforming\nalive\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
       [ ! -e "$STATE/.claude-permission-$key" ] || exit 21
-      printf "drifted\npermission-drift\tdrifted\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "drifted\npermission-drift\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
-      printf "ambiguous\nambiguous\tambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
+      printf "ambiguous\nambiguous\n" > "$FM_TEST_PERMISSION_VERDICT"
       claude_permission_posture_check "$2" claude-mate "$key"
     ' _ "$WATCH" "$window" || fail "Claude permission-drift watcher exercise failed (rc $?)"
 
@@ -264,7 +264,7 @@ test_claude_permission_check_needs_a_recorded_posture() {
   FM_STATE_OVERRIDE="$state" FM_TEST_PERMISSION_WAKE_LOG="$log" \
     bash -c '
       . "$1"
-      fm_backend_agent_state_detail_for_meta() { printf "permission-drift\tdrifted"; }
+      fm_backend_agent_state_for_meta() { printf "permission-drift"; }
       fm_wake_append() { printf "%s|%s|%s\n" "$1" "$2" "$3" >> "$FM_TEST_PERMISSION_WAKE_LOG"; }
       wake() { :; }
       key=$(window_key "$2")

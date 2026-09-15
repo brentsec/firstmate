@@ -912,22 +912,12 @@ fm_backend_target_exists() {  # <backend> <target> [expected-label]
 # secondmate ghost-tab and agent-process recovery path has not been empirically
 # validated. Orca and cmux do not support secondmate spawns.
 fm_backend_agent_state() {  # <backend> <target> [expected-harness] [claude-mode]
-  local detail
-  detail=$(fm_backend_agent_state_detail "$@")
-  printf '%s' "${detail%%$'\t'*}"
-}
-
-# The same state followed by a tab and the Claude posture that produced it
-# (conforming|drifted|ambiguous|unobserved|unreadable, or empty when no policy
-# read was made), for callers that must tell a conforming observation from a
-# merely unobserved one, such as the watcher's drift-notification dedupe.
-fm_backend_agent_state_detail() {  # <backend> <target> [expected-harness] [claude-mode] -> "<state>\t<posture>"
   local backend=$1 target=$2 expected_harness=${3:-} claude_mode=${4:-}
-  fm_backend_source "$backend" || { printf 'unverified\t'; return 0; }
+  fm_backend_source "$backend" || { printf 'unverified'; return 0; }
   case "$backend" in
-    tmux) fm_backend_tmux_agent_state "$target"; printf '\t' ;;
-    herdr) fm_backend_herdr_agent_state_detail "$target" "$expected_harness" "$claude_mode" ;;
-    *) printf 'unverified\t' ;;
+    tmux) fm_backend_tmux_agent_state "$target" ;;
+    herdr) fm_backend_herdr_agent_state "$target" "$expected_harness" "$claude_mode" ;;
+    *) printf 'unverified' ;;
   esac
 }
 
@@ -942,30 +932,24 @@ fm_backend_agent_state_detail() {  # <backend> <target> [expected-harness] [clau
 # Firstmate-owned launch records one. A malformed record is unreadable, never
 # permission to launch.
 fm_backend_agent_state_for_meta() {  # <meta-file>
-  local detail
-  detail=$(fm_backend_agent_state_detail_for_meta "$1")
-  printf '%s' "${detail%%$'\t'*}"
-}
-
-fm_backend_agent_state_detail_for_meta() {  # <meta-file> -> "<state>\t<posture>"
   local meta=$1 backend target harness mode
-  [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'unreadable\t'; return 0; }
+  [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'unreadable'; return 0; }
   backend=$(fm_backend_of_meta "$meta")
   target=$(fm_backend_target_of_meta "$meta")
   harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
-  [ -n "$target" ] || { printf 'unreadable\t'; return 0; }
+  [ -n "$target" ] || { printf 'unreadable'; return 0; }
   case "$backend:$harness" in
     herdr:claude*)
       mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
       case "$mode" in
         bypass|auto)
-          fm_backend_agent_state_detail "$backend" "$target" claude "$mode"
+          fm_backend_agent_state "$backend" "$target" claude "$mode"
           return 0
           ;;
       esac
       ;;
   esac
-  fm_backend_agent_state_detail "$backend" "$target"
+  fm_backend_agent_state "$backend" "$target"
 }
 
 # One bounded Claude permission-posture read for a task record: a single

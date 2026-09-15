@@ -1,6 +1,7 @@
 # CI lint memory measurement
 
-The 2026-09-14 private-mirror commissioning measured `bin/fm-lint.sh` in its CI mode (full canonical set, `--external-sources`, extended dataflow, two bounded workers) after the private seed's `Lint` job died on a hosted runner with only its two banner lines printed.
+The 2026-09-14 mirror commissioning measured `bin/fm-lint.sh` in its CI mode (full canonical set, `--external-sources`, extended dataflow, two bounded workers) after the seed's `Lint` job died on a hosted runner with only its two banner lines printed.
+At the time of that measurement the seed repository was private; `brentsec/firstmate` is a PUBLIC fork of the official repository today, so its CI runs on the 16 GB public runner and the 8 GB figures below are historical commissioning evidence, not a live constraint.
 The seed was commit `bd4caf87209d802b2ee30d639bd4f39129c4b314`; the official common ancestor was `a6618ddc690b4e613b62c6c4a3f6df4808a778b1`; the candidate was that seed plus the lint fixes and the one-process-per-root worker shape this record accompanies.
 ShellCheck was the repository-pinned 0.11.0 Linux x86_64 build, whose GHC 9.8.2 runtime has its memory options compiled out (`shellcheck +RTS -M4g -RTS` answers `Most RTS options are disabled`), so no heap limit can be handed to it.
 The host was Linux 7.2.0 with 16 cores and 60 GB; `/usr/bin/time` was absent, so peak RSS came from the `ps` sampler and the `VmHWM` probe recorded below.
@@ -8,7 +9,7 @@ The host was Linux 7.2.0 with 16 cores and 60 GB; `/usr/bin/time` was absent, so
 ## Runner and job facts
 
 GitHub's standard `ubuntu-latest` runner is 2 vCPUs and 8 GB for a private repository and 4 vCPUs and 16 GB for a public one ([hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)).
-The private seed's `Lint` job (`brentsec/firstmate` run 34927649628, image `ubuntu-24.04` 20260907.300.1) started `bin/fm-lint.sh` at 04:08:26Z, printed only the ShellCheck version and analysis-mode banner lines, and ended at 04:22:37Z with `Process completed with exit code 143`; the job's 25 minute timeout was not reached and the log carries no cancellation or runner-shutdown annotation.
+The seed's `Lint` job, run while the repository was still private (`brentsec/firstmate` run 34927649628, image `ubuntu-24.04` 20260907.300.1), started `bin/fm-lint.sh` at 04:08:26Z, printed only the ShellCheck version and analysis-mode banner lines, and ended at 04:22:37Z with `Process completed with exit code 143`; the job's 25 minute timeout was not reached and the log carries no cancellation or runner-shutdown annotation.
 The official `Lint` job at the imported commit `da5e658562128ce94d2ea374fb018004b859bfdf` ran the same script on a public runner from 03:27:18Z to 03:40:46Z and passed.
 Roots inside each shard are linted in canonical order (`bin/*.sh`, `bin/backends/*.sh`, `tests/*.sh`), so the heaviest source graphs (`bin/fm-teardown.sh`, `bin/fm-watch.sh`, `tests/fm-pending-reply.test.sh`) are reached late in a shard.
 
@@ -22,7 +23,7 @@ Each row is one `CI=true bin/fm-lint.sh` run on the host above with the `ps` sam
 | seed `bd4caf87` | one ShellCheck process per shard | 9.4 GiB and 8.6 GiB | 18.0 GiB | 401 s | exit 1: SC1007 in `bin/backends/herdr.sh`, SC2100 twice in `bin/fm-pending-reply-lib.sh`, SC2329 in `tests/fm-backend.test.sh` |
 | candidate | one ShellCheck process per root | 9.5 GiB and 8.4 GiB (largest single roots) | 12.4 GiB | 418 s | exit 0 |
 
-The seed's five private commits grew the largest source graphs by adding `bin/fm-claude-permission-lib.sh` and its dependencies to many roots (`bin/fm-watch.sh` 830 KiB to 896 KiB, `bin/fm-teardown.sh` 778 KiB to 841 KiB, `tests/fm-pending-reply.test.sh` 513 KiB to 576 KiB), which is why the seed needs more than the ancestor.
+The seed's five custom commits grew the largest source graphs by adding `bin/fm-claude-permission-lib.sh` and its dependencies to many roots (`bin/fm-watch.sh` 830 KiB to 896 KiB, `bin/fm-teardown.sh` 778 KiB to 841 KiB, `tests/fm-pending-reply.test.sh` 513 KiB to 576 KiB), which is why the seed needs more than the ancestor.
 One process per root does not lower a worker's peak, because the peak is the largest single root either way; it lowers the concurrent sum because memory is returned between roots instead of staying at the shard's high-water mark, and it makes the peak of every root observable on its own.
 
 ## Memory cap reproduction
@@ -63,7 +64,8 @@ Peak RSS is `VmHWM` sampled every 0.1 s; wall time is one process on an otherwis
 | `bin/fm-control.sh` | 446 KiB / 14 | 1428 MiB / 7 s | 164 MiB / 3 s | 102 MiB / 0 s |
 | `bin/backends/herdr.sh` | 551 KiB / 14 | 1104 MiB / 7 s | 179 MiB / 3 s | 314 MiB / 2 s |
 
-Every source-aware, dataflow-enabled root above 4 GiB has a source graph above 550 KiB, and the largest single root needs more than the 8 GB a private-repository runner offers, so no arrangement of the current CI definition (per root, per shard, one worker, or two) fits that runner.
+Every source-aware, dataflow-enabled root above 4 GiB has a source graph above 550 KiB, and the largest single root needs more than the 8 GB a private-repository runner offers, so no arrangement of the current CI definition (per root, per shard, one worker, or two) would have fitted that runner.
+This is why the repository's visibility matters to CI: the candidate's 12.4 GiB concurrent peak fits the 16 GB public runner the fork now uses, and converting the repository back to private would break `Lint` again.
 Either setting alone stays near or under 1 GiB per process.
 
 ## Which checks need which setting
