@@ -24,9 +24,10 @@
 #   loud one-line deviation notice is printed and the spawn continues.
 #   no-mistakes-prod-only is a registry policy rather than a task mode and is
 #   refused as a flag value.
-#   Ship/scout launches always supply fm-dod-lib.sh's current worker role scope
-#   using the same private launch-brief overlay. This never rewrites a project's
-#   instruction files or a secondmate's charter.
+#   Ship/scout launches always put fm-dod-lib.sh's current worker role scope
+#   first in the private launch-brief overlay, including the exact task-owned
+#   steering inbox. This never rewrites a project's instruction files or a
+#   secondmate's charter.
 #        fm-spawn.sh <task-id> --relaunch [--harness <name>] [--model <name>] [--effort <level>]
 #   --relaunch launches a replacement agent for an EXISTING task into that
 #   task's own recorded endpoint and worktree instead of creating either. It is
@@ -2000,11 +2001,15 @@ effort_flag_for_harness() {
       esac
       ;;
     codex)
-      # The installed codex config schema uses model_reasoning_effort, and the
-      # bundled model catalog advertises low|medium|high|xhigh. Omit max rather
-      # than passing an unsupported value.
+      # The installed codex config schema uses model_reasoning_effort. The
+      # installed model catalog supports max for gpt-5.6-luna; keep that level
+      # scoped to the model whose catalog entry advertises it.
       case "$effort" in
         low|medium|high|xhigh) printf -- '-c %s ' "$(shell_quote "model_reasoning_effort=\"$effort\"")" ;;
+        max)
+          [ "$model" = gpt-5.6-luna ] || return 0
+          printf -- '-c %s ' "$(shell_quote 'model_reasoning_effort="max"')"
+          ;;
       esac
       ;;
     grok)
@@ -2284,8 +2289,9 @@ if [ "$KIND" = secondmate ]; then
   # PRIMARY checkout's current default-branch commit, so a freshly spawned or
   # recovery-respawned secondmate always runs the primary's version (AGENTS.md
   # spawn section). Purely local - no fetch: the home is a worktree of this same
-  # repo and already holds the commit. ff-only and guarded; a dirty, diverged, or
-  # wrong-branch home is left untouched and launches as-is. The agent re-reads
+# repo and already holds the commit. The same guarded path can reconcile a clean
+# divergence already present at the target; a dirty, uniquely diverged, or
+# wrong-branch home is left untouched and launches as-is. The agent re-reads
   # AGENTS.md fresh on launch, so no nudge is needed here.
   # On a remote host this spawn is the host-local leg of a launch whose parent has
   # already synced the home to ITS primary commit, and $FM_ROOT here is only that
@@ -2294,7 +2300,7 @@ if [ "$KIND" = secondmate ]; then
   if [ "${FM_SKIP_SECONDMATE_SYNC:-0}" = 1 ]; then
     :
   elif sm_primary_head=$(primary_head_commit "$FM_ROOT"); then
-    sm_ff_out=$(ff_target "$PROJ_ABS" "secondmate $ID" "$sm_primary_head" yes yes 2>&1 || true)
+    sm_ff_out=$(ff_target "$PROJ_ABS" "secondmate $ID" "$sm_primary_head" yes yes "$ID" "$STATE" 2>&1 || true)
     case "$sm_ff_out" in
       *': skipped:'*)
         sm_ff_line=$(first_line "$sm_ff_out")
@@ -2379,9 +2385,9 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
   BRIEF="$DATA/$ID/launch-brief.md"
   BRIEF_TMP="$DATA/$ID/.launch-brief.md.${BASHPID:-$$}"
   {
-    cat "$SOURCE_BRIEF" &&
+    fm_brief_worker_role "$STATE" "$ID" &&
       printf '\n' &&
-      fm_brief_worker_role &&
+      cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
         fm_brief_intent_overlay "$CAPTAIN_INTENT"
       fi

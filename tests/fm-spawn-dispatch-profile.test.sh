@@ -418,21 +418,37 @@ test_codex_threads_model_and_effort() {
   pass "codex receives --model and model_reasoning_effort profile flags"
 }
 
-test_codex_omits_invalid_max_effort() {
+test_codex_threads_model_and_max_effort() {
   local rec id out status launch
   id=profile-codex-max-z4
   rec=$(make_spawn_case profile-codex-max codex "$id")
   read_case_record "$rec"
 
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5.6-luna --effort max)
+  status=$?
+  expect_code 0 "$status" "codex Luna spawn with max effort should succeed"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" codex gpt-5.6-luna max
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "codex --model 'gpt-5.6-luna' -c 'model_reasoning_effort=\"max\"' --dangerously-bypass-approvals-and-sandbox" \
+    "codex launch did not thread Luna's max reasoning effort config"
+  pass "codex Luna receives --model and model_reasoning_effort max profile flags"
+}
+
+test_codex_omits_max_effort_for_unsupported_model() {
+  local rec id out status launch
+  id=profile-codex-max-unsupported-z4b
+  rec=$(make_spawn_case profile-codex-max-unsupported codex "$id")
+  read_case_record "$rec"
+
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5 --effort max)
   status=$?
-  expect_code 0 "$status" "codex spawn with unsupported max effort should omit the effort flag"
+  expect_code 0 "$status" "codex spawn with an unsupported model max effort should omit the effort flag"
   assert_meta_profile "$HOME_DIR/state/$id.meta" codex gpt-5 max
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "codex --model 'gpt-5' --dangerously-bypass-approvals-and-sandbox" \
     "codex launch did not preserve the model flag when max effort was omitted"
-  assert_not_contains "$launch" "model_reasoning_effort" "codex launch must omit unsupported max reasoning effort"
-  pass "codex omits unsupported max effort instead of passing a bad config value"
+  assert_not_contains "$launch" "model_reasoning_effort" "codex launch must omit unsupported model max reasoning effort"
+  pass "codex omits max for models without the catalog capability"
 }
 
 test_grok_threads_model_and_reasoning_effort() {
@@ -1184,7 +1200,7 @@ test_launch_environment_inherited_by_secondmate
 test_launch_environment_inheritance_preserves_on_source_errors
 
 test_worker_launch_delivers_role_scope() {
-  local rec id out launch kind prompt brief_kind brief content
+  local rec id out launch kind prompt envelope encoded brief_kind brief content first_line role_line task_line inbox
   for brief_kind in heading legacy scaffold; do
   for kind in no-mistakes direct-PR local-only scout; do
     [ "$brief_kind" = heading ] && [ "$kind" != no-mistakes ] && continue
@@ -1221,12 +1237,28 @@ SH
     fi
     expect_code 0 "$?" "$kind worker spawn failed: $out"
     launch=$(cat "$LAUNCH_LOG")
+    envelope="$CASE_DIR/prompt-envelope"
+    encoded="$CASE_DIR/encoded-prompt"
     prompt="$CASE_DIR/prompt"
-    FM_ROLE_PROMPT="$prompt" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch" || fail "could not consume $kind launch command"
+    FM_ROLE_PROMPT="$envelope" PATH="$FAKEBIN_DIR:$PATH" bash -c "$launch" || fail "could not consume $kind launch command"
+    sed -n '/FIRSTMATE_OP: v1 launch-brief:/,$p' "$envelope" > "$encoded"
+    "$ROOT/bin/fm-operational-input.sh" body < "$encoded" > "$prompt" ||
+      fail "could not decode $kind launch-brief envelope"
     # The final prompt delivered to the harness is the generated interface.
-    # An authored role heading must neither suppress nor duplicate the current
-    # worker contract; the launch section is its single, superseding owner.
+    # The current identity must precede the authored task, because a Firstmate
+    # worktree's own AGENTS.md assigns the unrelated supervisor identity.
+    first_line=$(sed -n '1p' "$prompt")
+    [ "$first_line" = '# Current worker role contract' ] ||
+      fail "$brief_kind $kind did not establish worker identity before task content"
+    role_line=$(grep -n '^# Current worker role contract$' "$prompt" | cut -d: -f1)
+    task_line=$(grep -n '^# Task$' "$prompt" | head -1 | cut -d: -f1)
+    [ "$role_line" -lt "$task_line" ] || fail "$brief_kind $kind put the worker identity after the task"
     assert_grep 'follow this brief instead of that supervisor contract' "$prompt" "$kind command did not deliver the role correction"
+    assert_grep 'You are a crewmate: an autonomous worker agent managed by firstmate' "$prompt" "$kind command did not establish the worker identity directly"
+    inbox="$HOME_DIR/state/$id.inbox"
+    assert_grep "$inbox" "$prompt" "$kind command did not name the worker's own steering inbox"
+    assert_grep "do not reject it as another home's state" "$prompt" "$kind command did not distinguish its inbox from another home's namespace"
+    assert_grep "Never inspect or change any other home's endpoint namespace" "$prompt" "$kind command weakened cross-home isolation"
     assert_grep 'brief for' "$prompt" "$kind command lost the task"
     [ "$(grep -c '^# Current worker role contract$' "$prompt")" -eq 1 ] ||
       fail "$brief_kind $kind duplicated the delivered worker contract"
@@ -1352,7 +1384,8 @@ test_active_dispatch_profile_allows_positional_harness
 test_active_dispatch_profile_allows_raw_launch_command
 test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
-test_codex_omits_invalid_max_effort
+test_codex_threads_model_and_max_effort
+test_codex_omits_max_effort_for_unsupported_model
 test_grok_threads_model_and_reasoning_effort
 test_grok_omits_invalid_max_reasoning_effort
 test_grok_omits_invalid_xhigh_reasoning_effort
