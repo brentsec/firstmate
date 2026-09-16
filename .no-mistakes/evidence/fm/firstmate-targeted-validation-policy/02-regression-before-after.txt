@@ -1,0 +1,20 @@
+### BEFORE the fix (commit 26d647c version of tests/fm-nm-test-contract.test.sh), ruby absent:
+$ bin/fm-test-run.sh tests/fm-nm-test-contract.test.sh
+FM_TEST_BEGIN 2026-09-16T01:46:24Z tests/fm-nm-test-contract.test.sh family=unclassified expected_gate_skip=none
+not ok - ruby is required to parse .no-mistakes.yaml for this contract
+FM_TEST_END 2026-09-16T01:46:24Z tests/fm-nm-test-contract.test.sh exit=1 duration_ms=17 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=1 skipped_gate=0 duration_ms=39
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=17 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/fm-nm-test-contract.test.sh duration_ms=17
+exit=1
+
+### AFTER the fix (HEAD version of tests/fm-nm-test-contract.test.sh), ruby absent:
+$ bin/fm-test-run.sh tests/fm-nm-test-contract.test.sh
+FM_TEST_BEGIN 2026-09-16T01:46:30Z tests/fm-nm-test-contract.test.sh family=unclassified expected_gate_skip=none
+skip: ruby not installed; cannot parse .no-mistakes.yaml for these contracts
+fm-test-run: gate skip: tests/fm-nm-test-contract.test.sh: ruby not installed; cannot parse .no-mistakes.yaml for these contracts
+FM_TEST_END 2026-09-16T01:46:30Z tests/fm-nm-test-contract.test.sh exit=0 duration_ms=17 gate_skip=true
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=1 duration_ms=41
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=17 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-nm-test-contract.test.sh duration_ms=17
+exit=0

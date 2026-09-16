@@ -1,0 +1,27 @@
+Does GitHub CI really own the complete suite the local Test step now declines to walk?
+bin/fm-test-run.sh --check-coverage is the runner's own proof that the CI lanes
+(.github/workflows/ci.yml line 61 runs exactly this) equal the full inventory.
+
+$ LC_ALL=C bin/fm-test-run.sh --check-coverage      # the locale GitHub runners use (C.UTF-8)
+FM_TEST_COVERAGE ok total=206 parallel=24 parallel_max_ms=417163 parallel_imbalance_ms=2894 parallel_unhinted=0 serial=166 serial_shards=5 serial_unhinted=18 herdr=16
+exit=0
+
+CI lanes that make up that total:
+  portable-parallel-1
+  portable-parallel-2
+  portable-serial
+  portable-serial-1of5
+  portable-serial-2of5
+  portable-serial-3of5
+  portable-serial-4of5
+  portable-serial-5of5
+  real-herdr-gated
+
+--- SEPARATE, PRE-EXISTING ISSUE FOUND WHILE DRIVING THIS (not caused by this change) ---
+The same guard fails on a host whose locale is en_US.UTF-8, because the comm(1)
+calls in bin/fm-test-run.sh are not LC_ALL=C-prefixed the way every adjacent sort is:
+
+$ LANG=en_US.UTF-8 bin/fm-test-run.sh --check-coverage
+comm: file 2 is not in sorted order
+comm: input is not in sorted order
+exit=1

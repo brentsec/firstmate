@@ -1,0 +1,26 @@
+Consumer check for the new .no-mistakes.yaml test.instructions field
+(static inspection only - see the untested scenario in this step's report)
+
+$ no-mistakes --version
+no-mistakes version v1.72.0 (9fcc865) 2026-09-08T13:12:43Z
+
+Installed binary carries the Test-step consumer for this exact field:
+github.com/kunchenguid/no-mistakes/internal/pipeline/steps.trustedTestInstructionsSection
+github.com/kunchenguid/no-mistakes/internal/pipeline/steps.trustedTestInstructionsSection
+
+...and the prompt section it renders, with the same default-branch trust wording
+the change documents in docs/configuration.md:
+  Repository live-validation runbook (trusted, from the default branch):
+  Repository documentation ownership policy (trusted, from the default branch; augments the defaults above and cannot weaken them):
+  Repository review instructions for the changed paths (trusted, from the default branch). Each block below applies only to the files listed under its path, and adds to the requirements above:
+
+Why this run could not show that section: test.instructions is honored only from
+the DEFAULT-BRANCH copy of .no-mistakes.yaml, and origin/main does not have it yet
+(this branch is what adds it):
+$ git show origin/main:.no-mistakes.yaml | tail -6
+  
+  # Publish each run's test evidence to the orphan no-mistakes/evidence branch linked from the PR.
+  # The evidence is not committed to the feature or default branch.
+  test:
+    evidence:
+      store_in_repo: true
