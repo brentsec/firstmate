@@ -179,6 +179,26 @@ test_gate_lets_a_guard_drive_the_real_fleet_scripts_under_a_gate_marker() {
     "the shared gate must carry the test-suite bypass so a live guard can drive the real fleet scripts"
 }
 
+test_fm_test_run_never_activates_an_opt_in_guard_by_default() {
+  # bin/fm-test-run.sh is the exact selection tool the trusted no-mistakes
+  # Test-step instructions (.no-mistakes.yaml) point routine validation at.
+  # Driving an opt-in guard through that real entry point, with no live
+  # variable set either way, must report the runner's own structured
+  # gate-skip marker rather than ever executing the live action.
+  local path out rc
+  path=$(guard optin-via-runner opt-in FM_FAKE_LIVE fmfakeharness)
+  set +e
+  out=$(clean_env PATH="$BIN:/usr/bin:/bin" "$ROOT/bin/fm-test-run.sh" "$path" 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "an unrequested opt-in guard driven through fm-test-run.sh must exit 0"
+  assert_contains "$out" "gate_skip=true" \
+    "fm-test-run.sh must record the opt-in guard as a gate skip when no live variable is set"
+  if printf '%s\n' "$out" | grep -qx ran; then
+    fail "fm-test-run.sh must never activate a token-spending guard on its own"$'\n'"--- output ---"$'\n'"$out"
+  fi
+}
+
 test_every_live_guard_is_wired_to_the_shared_gate() {
   local script out listing checked=0
   listing=$("$ROOT/bin/fm-test-run.sh" --family live-harness-optin --list) \
@@ -217,4 +237,6 @@ test_any_of_several_entry_points_turns_a_guard_on
 pass "any entry point of a multi-mode guard turns it on"
 test_gate_lets_a_guard_drive_the_real_fleet_scripts_under_a_gate_marker
 pass "the shared gate carries the gate-refusal bypass into every live guard"
+test_fm_test_run_never_activates_an_opt_in_guard_by_default
+pass "fm-test-run.sh never activates an opt-in guard on its own"
 test_every_live_guard_is_wired_to_the_shared_gate

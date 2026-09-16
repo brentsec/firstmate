@@ -52,5 +52,11 @@ test:
     that must always run.
     Never run `--all` or otherwise walk the entire tests/ suite locally:
     GitHub CI already owns full deterministic regression coverage.
+    Routine validation must never set an `FM_*_E2E` variable, `FM_LIVE=1`, or
+    otherwise activate a test whose own gate classifies it as an opt-in live
+    check (see `fm_live_gate` in tests/lib.sh and the `live-harness-optin`
+    family in bin/fm-test-run.sh). Those live checks stay available for a
+    deliberate maintainer run outside routine validation, never as part of
+    judging or running tests for a branch.
   evidence:
     store_in_repo: true
