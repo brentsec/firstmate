@@ -215,7 +215,7 @@ if [ -n "$REMOTE_HOST" ]; then
       emit unknown remote-endpoint "alive on $REMOTE_HOST (an idle secondmate is healthy)"
       ;;
     permission-drift)
-      emit unknown remote-endpoint "remote Claude process lacks the permission posture its launch recorded on $REMOTE_HOST; recover it with bin/fm-spawn.sh $ID --secondmate, the same remote route the startup liveness sweep uses"
+      emit unknown remote-endpoint "remote Claude process lacks the permission posture its launch recorded on $REMOTE_HOST; recover it with bin/fm-spawn.sh $ID --secondmate, which owns remote secondmate recovery because bin/fm-control.sh refuses a remotely placed mate"
       ;;
     ambiguous)
       emit unknown remote-endpoint "the top-level Claude process on $REMOTE_HOST carries both permission flags; reconcile the endpoint before any lifecycle action"

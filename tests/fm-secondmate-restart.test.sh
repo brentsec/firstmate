@@ -580,9 +580,7 @@ test_native_ultra_restart_keeps_local_and_remote_profiles() {
 
 # The other half of that pin: an Ultra profile that does NOT select native Codex
 # through Pi has no launch to land on, so it is refused here, before the persist
-# request is even armed and long before anything on the host is stopped. This is
-# the only place that refusal lives now that the startup liveness sweep routes
-# its drift recovery through this owner instead of carrying its own copy.
+# request is even armed and long before anything on the host is stopped.
 test_non_native_ultra_is_refused_before_anything_is_stopped() {
   local dir out rc
   dir=$(new_case non-native-ultra)

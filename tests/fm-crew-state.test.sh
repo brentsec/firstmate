@@ -2134,8 +2134,8 @@ test_remote_dead_reports_remote_verdict() {
 
 # A drifted remote mate is repaired on its own host: bin/fm-control.sh refuses
 # every lifecycle verb for a remotely placed secondmate by name, so this reader
-# must name the remote route its two owners use - bin/fm-spawn.sh <id>
-# --secondmate and the startup liveness sweep - and never the local relaunch.
+# must name the command that owns remote secondmate recovery - bin/fm-spawn.sh
+# <id> --secondmate - and never the local relaunch.
 test_remote_permission_drift_names_the_remote_repair_path() {
   reset_fakes
   local d out rc control_rc control_out
