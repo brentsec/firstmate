@@ -155,20 +155,13 @@ case "${1:-}" in
         exit 0 ;;
       process-info)
         # The process-level view a registration is verified against (#4115):
-        # `agent` puts a conforming live claude in the foreground, `restored`
-        # puts Herdr's native claude --resume shape there without Firstmate's
-        # permission flag, `nested` puts a conforming worker there with a
-        # claude --resume child it runs itself (never the worker), `both` puts
-        # a top-level worker carrying both permission flags there, `shell` a
-        # bare zsh whose pid is the test script itself (a real, long-lived
-        # process with no harness descendant, so the adapter's real
-        # process-table walk finds it), and anything else answers nothing.
+        # `agent` puts a live claude in the foreground, `shell` a bare zsh whose
+        # pid is the test script itself (a real, long-lived process with no
+        # harness descendant, so the adapter's real process-table walk finds
+        # it), and anything else answers nothing (unreadable).
         pane=""; args=("$@"); for ((i=0; i<${#args[@]}; i++)); do [ "${args[$i]}" = --pane ] && pane=${args[$((i+1))]:-}; done
         case "${FM_FAKE_HERDR_PROCESS:-agent}" in
-          agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
-          restored) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
-          nested) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]},{"pid":424243,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
-          both) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--permission-mode","auto"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
+          agent) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":424242,"foreground_processes":[{"pid":424242,"name":"claude","argv0":"claude"}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
           shell) printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":%s,"foreground_processes":[{"pid":%s,"name":"zsh","argv0":"zsh","argv":["-zsh"]}]}}}\n' "$pane" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" ;;
         esac
         exit 0 ;;
@@ -1446,123 +1439,6 @@ test_no_run_grok_uses_isolated_fallback() {
   pass "grok still reads working through its isolated rendered-tail fallback"
 }
 
-test_no_run_herdr_restored_claude_without_bypass_is_not_alive() {
-  command -v jq >/dev/null 2>&1 || { pass "Herdr restored-Claude posture test skipped without jq"; return; }
-  reset_fakes
-  local d; d=$(new_case herdr-restored-claude)
-  make_repo_on_branch "$d/wt" fm/feat-herdr-restored
-  make_fakebin "$d" >/dev/null
-  fm_write_meta "$d/state/feat-herdr-restored.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
-    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
-  FM_FAKE_AXI_STATUS=""
-  FM_FAKE_RUNS_LIST=""
-  FM_FAKE_HERDR_AGENT_STATUS=idle
-  FM_FAKE_HERDR_PROCESS=restored
-  local out; out=$(run_crew_state "$d" feat-herdr-restored)
-  assert_contains "$out" "state: unknown" "a restored Claude without its recorded bypass posture must not read alive"
-  assert_contains "$out" "lacks the permission posture its launch recorded" \
-    "the public state reader must name the permission drift"
-  assert_contains "$out" "relaunch in place" \
-    "the public state reader must preserve the endpoint and local copy through relaunch"
-  pass "fm-crew-state detects a native claude --resume that lost its recorded bypass posture"
-}
-
-# The drift expectation is the task's recorded launch posture. A record with no
-# recorded posture has no conclusive expectation, so the same restored process
-# keeps its ordinary live reading, and the current config (which would call it
-# drift) is never consulted.
-test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live() {
-  command -v jq >/dev/null 2>&1 || { pass "Herdr unrecorded-posture test skipped without jq"; return; }
-  reset_fakes
-  local d; d=$(new_case herdr-unrecorded-claude)
-  make_repo_on_branch "$d/wt" fm/feat-herdr-unrecorded
-  make_fakebin "$d" >/dev/null
-  fm_write_meta "$d/state/feat-herdr-unrecorded.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
-    "backend=herdr" "harness=claude"
-  mkdir -p "$d/config"
-  printf 'bypass\n' > "$d/config/claude-permission-mode"
-  printf 'working: implementing\n' > "$d/state/feat-herdr-unrecorded.status"
-  FM_FAKE_AXI_STATUS=""
-  FM_FAKE_RUNS_LIST=""
-  FM_FAKE_TMUX_MISSING=1
-  FM_FAKE_HERDR_AGENT_STATUS=idle
-  FM_FAKE_HERDR_BUSY=0
-  FM_FAKE_HERDR_PROCESS=restored
-  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-unrecorded)
-  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-unrecorded idle --gen "$gen" \
-    --source claude-hook --event stop
-  local out; out=$(FM_CONFIG_OVERRIDE="$d/config" run_crew_state "$d" feat-herdr-unrecorded)
-  assert_not_contains "$out" "permission posture" \
-    "a record with no recorded launch posture must not be judged against the current config"
-  assert_contains "$out" "source: status-log" \
-    "a live restored Claude with no recorded posture must keep its ordinary reading"
-  pass "fm-crew-state needs a recorded launch posture before it calls a live Claude drifted"
-}
-
-# A nested claude CLI the worker runs from its own shell tool sits in the
-# pane's foreground group beside the worker. It is never the worker, so a
-# conforming top-level process keeps its ordinary reading whatever the child's
-# argv says.
-test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live() {
-  command -v jq >/dev/null 2>&1 || { pass "Herdr nested-Claude posture test skipped without jq"; return; }
-  reset_fakes
-  local d; d=$(new_case herdr-nested-claude)
-  make_repo_on_branch "$d/wt" fm/feat-herdr-nested
-  make_fakebin "$d" >/dev/null
-  fm_write_meta "$d/state/feat-herdr-nested.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
-    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
-  printf 'working: implementing\n' > "$d/state/feat-herdr-nested.status"
-  FM_FAKE_AXI_STATUS=""
-  FM_FAKE_RUNS_LIST=""
-  FM_FAKE_TMUX_MISSING=1
-  FM_FAKE_HERDR_AGENT_STATUS=idle
-  FM_FAKE_HERDR_BUSY=0
-  FM_FAKE_HERDR_PROCESS=nested
-  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-nested)
-  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-nested idle --gen "$gen" \
-    --source claude-hook --event stop
-  local out; out=$(run_crew_state "$d" feat-herdr-nested)
-  assert_not_contains "$out" "permission posture" \
-    "a nested claude CLI under a conforming worker must not be read as the worker's posture"
-  assert_contains "$out" "source: status-log" \
-    "a conforming worker running a nested claude CLI must keep its ordinary reading"
-  pass "fm-crew-state never attributes a nested claude CLI as the worker"
-}
-
-# A top-level worker carrying both permission flags cannot be attributed to
-# either posture. Startup, monitoring, and control all refuse it and ask for
-# reconciliation, so the targeted reader the recovery skill sends the captain
-# to must say the same thing instead of printing an ordinary live reading.
-test_no_run_herdr_claude_with_both_permission_flags_reports_ambiguous() {
-  command -v jq >/dev/null 2>&1 || { pass "Herdr ambiguous-posture test skipped without jq"; return; }
-  reset_fakes
-  local d; d=$(new_case herdr-ambiguous-claude)
-  make_repo_on_branch "$d/wt" fm/feat-herdr-ambiguous
-  make_fakebin "$d" >/dev/null
-  fm_write_meta "$d/state/feat-herdr-ambiguous.meta" "window=default:w1:p2" "worktree=$d/wt" "kind=ship" \
-    "backend=herdr" "harness=claude" "claude_permission_mode=bypass"
-  printf 'working: implementing\n' > "$d/state/feat-herdr-ambiguous.status"
-  FM_FAKE_AXI_STATUS=""
-  FM_FAKE_RUNS_LIST=""
-  FM_FAKE_TMUX_MISSING=1
-  FM_FAKE_HERDR_AGENT_STATUS=idle
-  FM_FAKE_HERDR_BUSY=0
-  FM_FAKE_HERDR_PROCESS=both
-  local gen; gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-herdr-ambiguous)
-  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-herdr-ambiguous idle --gen "$gen" \
-    --source claude-hook --event stop
-  local out; out=$(run_crew_state "$d" feat-herdr-ambiguous)
-  assert_contains "$out" "state: unknown" \
-    "an unattributable permission posture must not read as an ordinary live state"
-  assert_contains "$out" "carries both permission flags" \
-    "the targeted reader must name why the posture cannot be attributed"
-  assert_contains "$out" "reconcile the endpoint before any lifecycle action" \
-    "the targeted reader must use the same reconcile wording as startup, monitoring, and control"
-  assert_not_contains "$out" "source: status-log" \
-    "an ambiguous posture must not fall through to the ordinary status-log reading"
-  pass "fm-crew-state reports an ambiguous Claude permission posture instead of discarding it"
-}
-
 test_no_run_herdr_unknown_uses_backend_capture() {
   command -v jq >/dev/null 2>&1 || { pass "herdr pane fallback skipped without jq"; return; }
   reset_fakes
@@ -2132,57 +2008,6 @@ test_remote_dead_reports_remote_verdict() {
   pass "fm-crew-state remote: the remote host's own dead verdict is reported truthfully"
 }
 
-# A drifted remote mate is repaired on its own host: bin/fm-control.sh refuses
-# every lifecycle verb for a remotely placed secondmate by name, so this reader
-# must name the command that owns remote secondmate recovery - bin/fm-spawn.sh
-# <id> --secondmate - and never the local relaunch.
-test_remote_permission_drift_names_the_remote_repair_path() {
-  reset_fakes
-  local d out rc control_rc control_out
-  d=$(setup_remote_case remote-drift)
-  make_fakebin "$d" >/dev/null
-  out=$(FM_FAKE_REMOTE_STATE_OUT=permission-drift FM_FAKE_SSH_RC=0 run_remote_crew_state "$d" rsm); rc=$?
-  expect_code 0 "$rc" "remote permission drift exits 0"
-  assert_contains "$out" "lacks the permission posture its launch recorded" \
-    "the remote reader must name the permission drift"
-  assert_contains "$out" "remote-mac" "the remote verdict must name the host it came from"
-  assert_contains "$out" "bin/fm-spawn.sh rsm --secondmate" \
-    "the remote reader must name the remote repair path for this task"
-  assert_not_contains "$out" "unknown-remote" \
-    "a conclusive remote posture verdict must not be labeled unknown-remote"
-  control_out=$(FM_HOME="$d" FM_STATE_OVERRIDE="$d/state" \
-    "$ROOT/bin/fm-control.sh" rsm relaunch 2>&1); control_rc=$?
-  [ "$control_rc" -ne 0 ] \
-    || fail "fm-control relaunch must refuse a remotely placed secondmate, so the reader may not advise it"
-  assert_contains "$control_out" "remotely placed secondmate" \
-    "the refusal must be the remote-placement refusal, not an unrelated failure"
-  pass "fm-crew-state remote: a drifted remote mate is pointed at the repair path that actually works"
-}
-
-# A remote host's own conclusive posture verdict is evidence about the worker,
-# not about the transport. It must carry the same reconcile-before-lifecycle
-# wording the local arm, startup, monitoring, and control use, and must never
-# be presented as the unreachable-host reading reserved for transport blips.
-test_remote_ambiguous_posture_is_not_an_unreachable_reading() {
-  reset_fakes
-  local d out rc
-  d=$(setup_remote_case remote-ambiguous)
-  make_fakebin "$d" >/dev/null
-  printf 'working: refactoring the quota adapter\n' > "$d/state/rsm.status"
-  out=$(FM_FAKE_REMOTE_STATE_OUT=ambiguous FM_FAKE_SSH_RC=0 run_remote_crew_state "$d" rsm); rc=$?
-  expect_code 0 "$rc" "remote ambiguous posture exits 0"
-  assert_contains "$out" "carries both permission flags" \
-    "the remote reader must name why the posture cannot be attributed"
-  assert_contains "$out" "reconcile the endpoint before any lifecycle action" \
-    "the remote reader must use the same reconcile wording as the local arm"
-  assert_contains "$out" "remote-mac" "the remote verdict must name the host it came from"
-  assert_not_contains "$out" "unknown-remote" \
-    "a conclusive remote posture verdict must not be labeled unknown-remote"
-  assert_not_contains "$out" "not proof of death" \
-    "a conclusive remote posture verdict must not reuse the transport-blip bucket"
-  pass "fm-crew-state remote: an ambiguous posture reports the conflict, not an unreachable host"
-}
-
 test_missing_meta() {
   reset_fakes
   local d; d=$(new_case nometa)
@@ -2702,10 +2527,6 @@ test_other_branch_run_ignored
 test_no_run_busy_pane
 test_no_run_footer_text_alone_is_not_working
 test_no_run_grok_uses_isolated_fallback
-test_no_run_herdr_restored_claude_without_bypass_is_not_alive
-test_no_run_herdr_restored_claude_without_a_recorded_posture_stays_live
-test_no_run_herdr_nested_claude_cli_under_a_conforming_worker_stays_live
-test_no_run_herdr_claude_with_both_permission_flags_reports_ambiguous
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
 test_no_run_herdr_alive_with_failed_read_stays_live
@@ -2728,8 +2549,6 @@ test_remote_alive_with_log_uses_status_log
 test_remote_alive_idle_is_healthy_not_gone
 test_remote_unreachable_is_unknown_remote_not_dead
 test_remote_dead_reports_remote_verdict
-test_remote_permission_drift_names_the_remote_repair_path
-test_remote_ambiguous_posture_is_not_an_unreachable_reading
 test_missing_meta
 test_provably_working_via_runs_list_fallback
 test_not_provably_working_when_stopped

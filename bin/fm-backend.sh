@@ -878,110 +878,34 @@ fm_backend_target_exists() {  # <backend> <target> [expected-label]
 # fm_backend_agent_state: the single recovery-grade agent/endpoint state
 # contract. It is deliberately richer than fm_backend_target_exists's cheap
 # pane-presence read and prints exactly one of:
-#   alive            - a verified harness agent is running in its required posture.
-#   permission-drift - one attributed Claude process is running without the
-#                      permission posture its launch recorded
-#                      (claude_permission_mode= in the task record).
-#   dead             - the endpoint exists but confidently has no agent.
-#   missing          - the recorded endpoint is authoritatively absent.
-#   ambiguous        - the endpoint exists but its agent cannot be decided: the
-#                      backend could not attribute its process, or the one
-#                      attributed Claude process carries both permission flags.
-#   unreadable       - a target or inventory read failed or contradicted itself.
-#   unverified       - this backend has no recovery classifier.
-# Only `dead` and `missing` license a fresh spawn. `permission-drift` licenses
-# only the ordinary control-plane relaunch, which first proves and stops that
-# exact live Claude process before reusing its endpoint and worktree. Every
-# `alive` is proven at process level through the shared classifier in
-# bin/fm-agent-process-lib.sh, never from a registration or a rendered title
-# alone. The optional expected-harness and Claude-mode arguments add exact
-# invocation conformance on backends that expose argv boundaries, read from
-# the same process snapshot as the liveness verdict and judged on the pane's
-# top-level worker only, never on a nested `claude` CLI the worker itself
-# runs; a posture read that fails, describes another pane, or reports no argv
-# is an observability gap that keeps a proven-live endpoint alive rather than
-# degrading it. Callers that have no task metadata retain the historical
-# process-liveness view.
-#
-# The tmux adapter requires a successful session inventory and returns
-# `missing` only when it omits the exact window. The Herdr adapter reuses its
-# strict husk classifier, which verifies a registered agent against `pane
-# process-info` and the real process table, so a registration Herdr kept over a
-# shell-only pane reads `dead` here (issue #4115). Herdr additionally detects a
-# runtime-native `claude --resume` that omitted the permission flag the task's
-# launch recorded, then maps a positively stopped session server to `missing`
-# only in this recovery-grade view. Zellij remains unverified because its
-# secondmate ghost-tab and agent-process recovery path has not been empirically
-# validated. Orca and cmux do not support secondmate spawns.
-fm_backend_agent_state() {  # <backend> <target> [expected-harness] [claude-mode]
-  local backend=$1 target=$2 expected_harness=${3:-} claude_mode=${4:-}
+#   alive      - a verified harness agent is running.
+#   dead       - the endpoint exists but confidently has no agent.
+#   missing    - the recorded endpoint is authoritatively absent.
+#   ambiguous  - the endpoint exists but its process cannot be attributed.
+#   unreadable - a target or inventory read failed or contradicted itself.
+#   unverified - this backend has no recovery classifier.
+# Only `dead` and `missing` license recovery. Every `alive` is proven at
+# process level through the shared classifier in bin/fm-agent-process-lib.sh,
+# never from a registration or a rendered title alone. The tmux adapter
+# requires a successful session inventory and returns `missing` only when it
+# omits the exact window; the Herdr adapter reuses its strict husk classifier -
+# which verifies a registered agent against `pane process-info` and the real
+# process table, so a registration Herdr kept over a shell-only pane reads
+# `dead` here (issue #4115) - then maps a positively stopped session server to
+# `missing` only in this recovery-grade view. Zellij remains unverified because
+# its secondmate ghost-tab and agent-process recovery path has not been
+# empirically validated. Orca and cmux do not support secondmate spawns.
+fm_backend_agent_state() {  # <backend> <target>
+  local backend=$1 target=$2
   fm_backend_source "$backend" || { printf 'unverified'; return 0; }
   case "$backend" in
     tmux) fm_backend_tmux_agent_state "$target" ;;
-    herdr) fm_backend_herdr_agent_state "$target" "$expected_harness" "$claude_mode" ;;
+    herdr) fm_backend_herdr_agent_state "$target" ;;
     *) printf 'unverified' ;;
   esac
 }
 
-# Resolve the policy-aware recovery state for one exact task record. The
-# expectation a running process is judged against is the permission mode the
-# task's own launch recorded (claude_permission_mode=, written by
-# bin/fm-spawn.sh on every Claude spawn and relaunch), never the mutable
-# current config: editing config/claude-permission-mode changes the next
-# Firstmate-owned launch and cannot turn a correctly launched running worker
-# into drift. A record without that field (launched before it existed) has no
-# conclusive expectation and keeps the generic liveness view until its next
-# Firstmate-owned launch records one. A malformed record is unreadable, never
-# permission to launch.
-fm_backend_agent_state_for_meta() {  # <meta-file>
-  local meta=$1 backend target harness mode
-  [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'unreadable'; return 0; }
-  backend=$(fm_backend_of_meta "$meta")
-  target=$(fm_backend_target_of_meta "$meta")
-  harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
-  [ -n "$target" ] || { printf 'unreadable'; return 0; }
-  case "$backend:$harness" in
-    herdr:claude*)
-      mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
-      case "$mode" in
-        bypass|auto)
-          fm_backend_agent_state "$backend" "$target" claude "$mode"
-          return 0
-          ;;
-      esac
-      ;;
-  esac
-  fm_backend_agent_state "$backend" "$target"
-}
-
-# One bounded Claude permission-posture read for a task record: a single
-# `pane process-info` round-trip judged against the recorded launch mode,
-# without the retries, registration read, or process-table walk of the full
-# recovery-grade classifier. Prints conforming|drifted|ambiguous|unobserved|
-# unreadable, or `none` when the record carries no Claude policy on a backend
-# that exposes argv boundaries. The session-start digest uses it beside its
-# cheap presence read so startup stays bounded per task.
-fm_backend_claude_permission_posture_for_meta() {  # <meta-file>
-  local meta=$1 backend target harness mode
-  [ -f "$meta" ] && [ ! -L "$meta" ] || { printf 'none'; return 0; }
-  backend=$(fm_backend_of_meta "$meta")
-  target=$(fm_backend_target_of_meta "$meta")
-  harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
-  mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
-  case "$backend:$harness:$mode" in
-    herdr:claude*:bypass|herdr:claude*:auto) ;;
-    *) printf 'none'; return 0 ;;
-  esac
-  [ -n "$target" ] || { printf 'unreadable'; return 0; }
-  fm_backend_source herdr || { printf 'unreadable'; return 0; }
-  fm_backend_herdr_parse_target "$target" || { printf 'unreadable'; return 0; }
-  fm_backend_herdr_claude_permission_state "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" "$mode"
-}
-
-# Three-state view for callers that only need a yes/no agent verdict. It makes
-# the generic liveness read, which never judges a permission posture, so a
-# drifted worker is simply alive here and no fresh spawn can join it; policy-
-# aware callers use the detailed state above to replace one safely. An
+# Backward-compatible three-state view for existing callers. An
 # authoritatively missing endpoint is confidently not a live agent, while every
 # ambiguous, unreadable, or unverified result stays unknown.
 fm_backend_agent_alive() {  # <backend> <target>

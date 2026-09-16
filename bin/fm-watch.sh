@@ -388,7 +388,7 @@ window_label() {
 # The ONE derivation of a window's per-window marker key: `:`, `/` and `.` become
 # `_` so a window name is usable as a filename suffix. Every per-window file the
 # watcher keeps is named by it (.hash-, .count-, .stale-, .stale-since-,
-# .claude-permission-*, .wedge-escalations-, .paused-*, .writing-*), and live homes hold those markers on
+# .wedge-escalations-, .paused-*, .writing-*), and live homes hold those markers on
 # disk under the current format, so the format lives here alone: a second copy is
 # how a future change to it silently orphans a window's markers instead of clearing
 # them. The helpers below take the derived key rather than re-deriving it, so one
@@ -397,75 +397,6 @@ window_key() {  # <window>
   local key=${1//:/_}
   key=${key//\//_}
   printf '%s' "${key//./_}"
-}
-
-# Detect the one restoration path that process liveness alone cannot validate:
-# Herdr can synthesize `claude --resume` after a session or machine restart
-# without replaying Firstmate's unattended permission flag. The expectation is
-# the mode the task's own launch recorded (claude_permission_mode= in its
-# record), so a config edit never makes a correctly launched worker read as
-# drift, and a record without one is not checked. Run before the ordinary
-# secondmate idle exemption, so an idle restored mate cannot mask the drift
-# indefinitely. One exact process is routed through ordinary stuck-worker
-# recovery; an ambiguous posture (the pane's top-level Claude process carrying
-# both flags) is reported and never acted on automatically. A
-# generation-and-mode signature suppresses repeats of the same finding and is
-# cleared by a `conforming` bounded posture read, and by a dead-or-missing
-# verdict only in the narrow case where the endpoint vanishes between the
-# bounded read and the escalation below. An `unobserved` poll, when a tool
-# briefly holds the pane's foreground, proves nothing either way and keeps the
-# marker, so an unfixed drift is reported once per episode rather than at every
-# tool boundary. A marker left behind by an endpoint that disappeared silently
-# suppresses nothing later: the signature carries spawn_gen, which every
-# Firstmate-owned spawn or relaunch rewrites.
-#
-# The ordinary poll pays only the bounded posture read: one `pane process-info`
-# with no retries, no registration read, and no process-table walk. A healthy
-# worker and a worker whose tool holds the foreground both settle there. Only
-# suspicious narrow evidence - `drifted` or `ambiguous` argv - escalates to the
-# recovery-grade classification that resamples the pane, because only that
-# verdict may name an endpoint stale, and it is also what proves an endpoint
-# that vanished between the two reads is dead or missing rather than drifted.
-claude_permission_posture_check() {  # <window> <task> <marker-key>
-  local w=$1 task=$2 key=$3 meta backend harness mode spawn_gen state posture marker signature reason
-  [ -n "$task" ] || return 0
-  meta="$STATE/$task.meta"
-  [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
-  backend=$(fm_backend_of_meta "$meta")
-  harness=$(fm_backend_meta_exact_value "$meta" harness 2>/dev/null || true)
-  case "$backend:$harness" in herdr:claude*) ;; *) return 0 ;; esac
-  mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
-  case "$mode" in bypass|auto) ;; *) return 0 ;; esac
-  marker="$STATE/.claude-permission-$key"
-  posture=$(fm_backend_claude_permission_posture_for_meta "$meta" 2>/dev/null || printf 'unreadable')
-  case "$posture" in
-    conforming) rm -f "$marker"; return 0 ;;
-    drifted|ambiguous) ;;
-    *) return 0 ;;
-  esac
-  spawn_gen=$(fm_backend_meta_exact_value "$meta" spawn_gen 2>/dev/null || true)
-  state=$(fm_backend_agent_state_for_meta "$meta" 2>/dev/null || printf 'unreadable')
-  signature="${spawn_gen:-legacy}:$mode:$state"
-  case "$state" in
-    permission-drift)
-      reason="stale: $w (the live Claude process lacks the $mode permission posture its launch recorded; relaunch the worker safely in its recorded endpoint and local copy)"
-      ;;
-    ambiguous)
-      reason="stale: $w (Claude permission posture is ambiguous: the top-level Claude process carries both permission flags; refuse automatic recovery and reconcile the endpoint before any lifecycle action)"
-      ;;
-    dead|missing)
-      rm -f "$marker"
-      return 0
-      ;;
-    *) return 0 ;;
-  esac
-  [ "$(cat "$marker" 2>/dev/null || true)" != "$signature" ] || return 0
-  fm_wake_append stale "$w" "$reason" || exit 1
-  printf '%s' "$signature" > "$marker" || {
-    echo "error: Claude permission finding was queued for $task but its dedupe marker could not be written" >&2
-    exit 1
-  }
-  wake "$reason"
 }
 
 inbox_steer_escalate_unavailable() {  # <window> <task> <record>
@@ -2299,7 +2230,6 @@ EOF
     # exemption below, because a mate's steers land in an inbox too.
     [ -z "$task" ] || inbox_steer_check "$w" "$task"
     key=$(window_key "$w")
-    claude_permission_posture_check "$w" "$task" "$key"
     last=$(last_status_line "$STATE/$task.status")
     if ! status_is_paused_or_captain_held "$last" && [ -e "$STATE/.paused-$key" ]; then
       clear_pause_tracking "$key"

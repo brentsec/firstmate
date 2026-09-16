@@ -214,12 +214,6 @@ if [ -n "$REMOTE_HOST" ]; then
       fi
       emit unknown remote-endpoint "alive on $REMOTE_HOST (an idle secondmate is healthy)"
       ;;
-    permission-drift)
-      emit unknown remote-endpoint "remote Claude process lacks the permission posture its launch recorded on $REMOTE_HOST; recover it with bin/fm-spawn.sh $ID --secondmate, which owns remote secondmate recovery because bin/fm-control.sh refuses a remotely placed mate"
-      ;;
-    ambiguous)
-      emit unknown remote-endpoint "the top-level Claude process on $REMOTE_HOST carries both permission flags; reconcile the endpoint before any lifecycle action"
-      ;;
     dead|missing)
       emit unknown remote-endpoint "remote endpoint $REMOTE_STATE on $REMOTE_HOST"
       ;;
@@ -782,28 +776,8 @@ fi
 # read as death - a backend that failed to answer is unknown, never death, for
 # both classifier-backed backends (tmux and herdr) - and every death-class
 # verdict reports unknown rather than trusting a possibly-stale status log as
-# the current state. A live Claude process is also checked against the
-# permission posture its own launch recorded: process existence cannot mask a
-# lost unattended flag. Only a record that carries such a posture is worth that
-# recovery-grade read, so a record without one makes no extra backend call at
-# all, and a posture read that could not be made keeps the ordinary live
-# reading.
+# the current state.
 [ -n "$BACKEND_TARGET" ] || emit unknown none "no backend target recorded"
-AGENT_STATE=none
-CLAUDE_MODE=$(fm_backend_meta_exact_value "$META" claude_permission_mode 2>/dev/null || true)
-case "$TASK_BACKEND:$HARNESS:$CLAUDE_MODE" in
-  herdr:claude*:bypass|herdr:claude*:auto)
-    AGENT_STATE=$(fm_backend_agent_state_for_meta "$META")
-    case "$AGENT_STATE" in
-      permission-drift)
-        emit unknown none "Claude process lacks the permission posture its launch recorded; relaunch in place"
-        ;;
-      ambiguous)
-        emit unknown none "the top-level Claude process carries both permission flags; reconcile the endpoint before any lifecycle action"
-        ;;
-    esac
-    ;;
-esac
 if ! pane_readable "$BACKEND_TARGET"; then
   # A failed probe is not itself evidence the pane is gone: the herdr CLI can
   # error or stall under load, and tmux can fail to be executed at all (a
@@ -831,8 +805,9 @@ if ! pane_readable "$BACKEND_TARGET"; then
   #             contradicted themselves, which is unknown, never death.
   # Backends with no classifier (orca, zellij, and cmux all report unverified)
   # keep their historical capture-failure-means-gone reading.
-  case "$TASK_BACKEND:$AGENT_STATE" in
-    tmux:none|herdr:none) AGENT_STATE=$(fm_backend_agent_state_for_meta "$META") ;;
+  case "$TASK_BACKEND" in
+    tmux|herdr) AGENT_STATE=$(fm_backend_agent_state "$TASK_BACKEND" "$BACKEND_TARGET") ;;
+    *) AGENT_STATE=none ;;
   esac
   case "$TASK_BACKEND:$AGENT_STATE" in
     tmux:alive|herdr:alive)

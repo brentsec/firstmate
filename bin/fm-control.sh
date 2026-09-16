@@ -82,11 +82,8 @@
 #     classifier (tmux, herdr), because without one the "the agent stopped"
 #     postcondition cannot be proven. zellij, orca, and cmux are refused rather
 #     than reported as successful blind.
-#   - An ambiguous or unreadable endpoint state refuses. A policy-aware
-#     `permission-drift` state is one positively attributed live Claude process
-#     whose exact argv lacks the permission posture its launch recorded;
-#     `relaunch` may stop and replace only that exact process through the
-#     same transaction as any ordinary live agent.
+#   - An ambiguous or unreadable endpoint state refuses; only a positively
+#     classified state acts.
 #   - A composer that visibly holds pending text refuses before an exit command
 #     is typed, so existing text is preserved instead of being concatenated.
 #
@@ -141,8 +138,6 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
-# shellcheck source=bin/fm-claude-permission-lib.sh
-. "$SCRIPT_DIR/fm-claude-permission-lib.sh"
 
 POLL=${FM_CONTROL_POLL:-0.5}
 SETTLE_WAIT=${FM_CONTROL_SETTLE_WAIT:-5}
@@ -323,7 +318,7 @@ fm_backend_validate "$BACKEND" || exit 1
 # --- shared helpers ---------------------------------------------------------
 
 agent_state() {
-  fm_backend_agent_state_for_meta "$META"
+  fm_backend_agent_state "$BACKEND" "$T"
 }
 
 busy_verdict() {
@@ -431,10 +426,8 @@ verify_interrupt_running() {
     # An interrupt cancels a turn; it must never have stopped the agent. This
     # is the postcondition that separates a landed interrupt from an accident.
     after=$(agent_state)
-    case "$after" in
-      alive|permission-drift) ;;
-      *) die "task $ID's agent is '$after' after its interrupt key; an interrupt must leave the agent running" ;;
-    esac
+    [ "$after" = alive ] \
+      || die "task $ID's agent is '$after' after its interrupt key; an interrupt must leave the agent running"
     proof=agent-alive
   fi
   printf '%s' "$proof"
@@ -464,7 +457,7 @@ do_exit() {
       printf 'already-stopped'
       return 0
       ;;
-    alive|permission-drift) ;;
+    alive) ;;
     missing) die "task $ID's recorded endpoint is gone, so there is no agent to stop; reconcile the task before any further control action" ;;
     *) die "task $ID's endpoint reads '$state' rather than a positively classified state; refusing to send a lifecycle command into an unattributed endpoint" ;;
   esac
@@ -479,7 +472,7 @@ do_exit() {
           printf 'stopped'
           return 0
           ;;
-        alive|permission-drift) interrupt_result="delivered verified=agent-alive cancel=$cancel" ;;
+        alive) interrupt_result="delivered verified=agent-alive cancel=$cancel" ;;
         missing) die "task $ID's recorded endpoint disappeared after interrupt delivery, so exit cannot prove whether the agent stopped" ;;
         *) die "task $ID's endpoint reads '$state' after interrupt delivery rather than a positively classified state; exit cannot prove whether the agent stopped" ;;
       esac
@@ -591,7 +584,7 @@ relaunch_rollback() {
     stopping)
       state=$(agent_state 2>/dev/null || printf unknown)
       case "$state" in
-        alive|permission-drift)
+        alive)
           if [ -n "$RELAUNCH_BRIEF" ] && [ -f "$BRIEF_PRIOR" ]; then
             cp -p "$BRIEF_PRIOR" "$RELAUNCH_BRIEF" 2>/dev/null || true
           fi
@@ -813,14 +806,6 @@ do_relaunch() {
   require_state_verified_backend relaunch
   resolve_relaunch_profile
 
-  # A relaunch stops the running agent before fm-spawn.sh gets to resolve the
-  # launch posture, so resolve it HERE, before any mutation, exactly as
-  # bin/fm-spawn.sh does for a spawn. An unparseable config/claude-permission-mode
-  # would otherwise refuse only after the worker was already gone.
-  # bin/fm-claude-permission-lib.sh stays the only parser and prints the reason.
-  fm_claude_permission_mode "$FM_BACKEND_CONFIG_DIR" >/dev/null \
-    || die "task $ID was not relaunched and its agent is untouched; repair config/claude-permission-mode first"
-
   case "$KIND" in
     ship|scout)
       RELAUNCH_BRIEF="$DATA/$ID/brief.md"
@@ -888,7 +873,7 @@ case "$VERB" in
   interrupt)
     state=$(agent_state)
     case "$state" in
-      alive|permission-drift) ;;
+      alive) ;;
       unverified)
         # No recovery-grade classifier on this backend. Interrupt is
         # non-destructive and its endpoint-existence postcondition is still

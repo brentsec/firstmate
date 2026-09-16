@@ -844,32 +844,11 @@ for meta in "$STATE"/*.meta; do
   target=$(fm_backend_target_of_meta "$meta")
   if [ -n "$window" ]; then
     backend=$(fm_backend_of_meta "$meta")
-    # The cheap presence read stays the only liveness call per task. A Claude
-    # record on Herdr whose launch recorded its permission mode adds exactly one
-    # more bounded read, a single process snapshot judged against that recorded
-    # mode, so a runtime restoration cannot hide a lost posture while startup
-    # never pays the full recovery-grade classification (registration read,
-    # settle retries, process-table walk) for every task.
     if fm_backend_target_exists "$backend" "${target:-$window}" "fm-$id"; then
-      endpoint_state=alive
-      posture_mode=$(fm_backend_meta_exact_value "$meta" claude_permission_mode 2>/dev/null || true)
-      case "$(fm_backend_claude_permission_posture_for_meta "$meta" 2>/dev/null || printf 'unreadable')" in
-        drifted) endpoint_state=permission-drift ;;
-        ambiguous) endpoint_state=ambiguous ;;
-      esac
+      printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
     else
-      endpoint_state=missing
+      printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window"
     fi
-    case "$endpoint_state" in
-      alive) printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window" ;;
-      missing) printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window" ;;
-      permission-drift)
-        printf 'endpoint: permission-drift (Claude process lacks the %s permission posture its launch recorded; relaunch in place; backend=%s window=%s)\n' "$posture_mode" "$backend" "$window"
-        ;;
-      ambiguous)
-        printf 'endpoint: ambiguous (the top-level Claude process carries both permission flags; reconcile the endpoint before any lifecycle action; backend=%s window=%s)\n' "$backend" "$window"
-        ;;
-    esac
   else
     printf 'endpoint: unknown (no window recorded)\n'
   fi

@@ -578,30 +578,6 @@ test_native_ultra_restart_keeps_local_and_remote_profiles() {
   pass "native Ultra survives local restart and the remote restart transport"
 }
 
-# The other half of that pin: an Ultra profile that does NOT select native Codex
-# through Pi has no launch to land on, so it is refused here, before the persist
-# request is even armed and long before anything on the host is stopped.
-test_non_native_ultra_is_refused_before_anything_is_stopped() {
-  local dir out rc
-  dir=$(new_case non-native-ultra)
-  setup_remote_case "$dir" sm2 ok
-  export FM_FAKE_ANSWER_STATUS="$dir/home/state/sm2.status"
-  printf 'pi openai-codex/gpt-6-astra ultra\n' > "$dir/home/config/secondmate-harness"
-
-  out=$(run_restart "$dir" sm2); rc=$?
-  unset FM_FAKE_ANSWER_STATUS
-
-  expect_code 3 "$rc" "a refused profile must not be reported as a reload"$'\n'"$out"
-  assert_contains "$out" "nudged: sm2: the configured Ultra profile does not select native Codex through Pi" \
-    "the refusal must name the profile that cannot be launched"
-  assert_not_contains "$out" "restarted: sm2" "a refused profile must never be claimed as restarted"
-  grep -F 'fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" >/dev/null \
-    && fail "a refused Ultra profile still reached the remote relaunch"$'\n'"$(cat "$dir/ssh.log")"
-  grep -F 'fm-remote-secondmate-control.sh send' "$dir/ssh.log" | grep -qF 'Open-record persistence' \
-    && fail "a profile refused before the stop should not have spent the mate's turn on a persist request"
-  pass "a non-native Ultra pin is refused before the persist request or any stop"
-}
-
 # --- T9: an unrelated concurrent reply cannot release the persist gate -------
 test_concurrent_reply_cannot_release_persist_gate() {
   local dir out rc state corr rec
@@ -865,7 +841,6 @@ test_unknown_mate_is_accounted_for
 test_refused_restart_falls_back_without_claiming_a_reload
 test_local_restart_uses_the_home_pin_and_reports_what_ran
 test_native_ultra_restart_keeps_local_and_remote_profiles
-test_non_native_ultra_is_refused_before_anything_is_stopped
 test_remote_mate_restarts_over_the_transport_hop
 test_unreachable_host_is_reported_unknown
 test_concurrent_reply_cannot_release_persist_gate

@@ -50,38 +50,6 @@ trap relaunch_cleanup EXIT
 # The same lifecycle-modelling tmux stub as tests/fm-control.test.sh: the
 # harness's exit command stops the agent, and a launch-brief literal starts the
 # harness named in `becomes`.
-# A Herdr endpoint whose top-level Claude worker (the foreground process
-# group leader) carries both permission flags at once, beside a nested claude
-# CLI it runs itself: the worker's own posture is ambiguous, and the
-# conforming child can never settle it.
-make_herdr_conflicting_stub() {  # <dir>
-  local fb="$1/fakebin"
-  cat > "$fb/herdr" <<'SH'
-#!/usr/bin/env bash
-set -u
-printf '%s\n' "$*" >> "$FM_FAKE_DIR/herdr.log"
-case "${1:-} ${2:-}" in
-  "pane get")
-    printf '{"result":{"pane":{"pane_id":"%s","cwd":"%s"}}}\n' "${3:-}" "$FM_FAKE_DIR/../wt"
-    ;;
-  "agent get")
-    printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n'
-    ;;
-  "pane process-info")
-    pane=""
-    while [ "$#" -gt 0 ]; do
-      [ "$1" != --pane ] || { pane=${2:-}; break; }
-      shift
-    done
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":424200,"foreground_process_group_id":424201,"foreground_processes":[{"pid":424201,"name":"claude","argv0":"claude","argv":["claude","--resume","session-123","--dangerously-skip-permissions","--permission-mode","auto"]},{"pid":424202,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions"]}]}}}\n' "$pane"
-    ;;
-esac
-exit 0
-SH
-  chmod +x "$fb/herdr"
-  : > "$1/fake/herdr.log"
-}
-
 make_tmux_stub() {  # <dir>
   local fb="$1/fakebin"
   mkdir -p "$fb"
@@ -337,47 +305,6 @@ SH
   chmod +x "$dir/fakebin/tasks-axi"
 }
 
-test_relaunch_refuses_an_ambiguous_top_level_claude_posture() {
-  local dir out rc before_meta
-  dir=$(new_case herdr-conflicting rl44)
-  add_ship_task "$dir" rl44 claude
-  {
-    printf '%s\n' 'window=lab:w1:p2'
-    printf '%s\n' 'endpoint_task_id=rl44'
-    printf '%s\n' "worktree=$dir/wt"
-    printf '%s\n' "project=$dir/proj"
-    printf '%s\n' 'harness=claude'
-    printf '%s\n' 'kind=ship'
-    printf '%s\n' 'mode=no-mistakes'
-    printf '%s\n' 'yolo=off'
-    printf '%s\n' 'tasktmp=/tmp/fm-rl44'
-    printf '%s\n' 'model=default'
-    printf '%s\n' 'effort=default'
-    printf '%s\n' 'backend=herdr'
-    printf '%s\n' 'herdr_session=lab'
-    printf '%s\n' 'herdr_workspace_id=w1'
-    printf '%s\n' 'herdr_tab_id=w1:t1'
-    printf '%s\n' 'herdr_pane_id=w1:p2'
-    printf '%s\n' 'claude_permission_mode=bypass'
-  } > "$dir/home/state/rl44.meta"
-  make_herdr_conflicting_stub "$dir"
-  before_meta=$(cat "$dir/home/state/rl44.meta")
-
-  out=$(run_control "$dir" rl44 relaunch --note "do not trust a conflicting posture"); rc=$?
-  [ "$rc" -ne 0 ] || fail "a top-level Claude process carrying both permission flags must refuse relaunch"
-  assert_contains "$out" "reads 'ambiguous'" \
-    "the public control plane must name the ambiguous posture"
-  [ "$(cat "$dir/home/state/rl44.meta")" = "$before_meta" ] \
-    || fail "an ambiguous posture refusal changed the task endpoint record"
-  assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-text" \
-    "an ambiguous posture refusal must not type a lifecycle command"
-  assert_not_contains "$(cat "$dir/fake/herdr.log")" "send-keys" \
-    "an ambiguous posture refusal must not send a lifecycle key"
-  [ -z "$(git -C "$dir/wt" status --porcelain)" ] \
-    || fail "an ambiguous posture refusal changed the isolated copy"
-  pass "fm-control refuses an ambiguous top-level Claude posture without touching the endpoint or copy"
-}
-
 # --- 1. same-harness relaunch -----------------------------------------------
 
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
@@ -402,12 +329,6 @@ test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint() {
     || fail "the transaction journal should end complete"
   assert_grep "/exit" "$dir/fake/literal" "the previous agent should have been exited"
   assert_grep "encode launch-brief" "$dir/fake/literal" "the replacement should have been launched"
-  assert_contains "$(cat "$dir/fake/literal")" "claude --dangerously-skip-permissions" \
-    "the replacement Claude must explicitly reapply bypass permissions"
-  assert_not_contains "$(cat "$dir/fake/literal")" "claude --permission-mode auto" \
-    "the default relaunch must not silently change permission posture"
-  [ "$(meta_field "$dir" rl1 claude_permission_mode)" = bypass ] \
-    || fail "the relaunch must record the bypass posture it launched with, got '$(meta_field "$dir" rl1 claude_permission_mode)'"
   pass "fm-control relaunch: a same-harness relaunch replaces the agent in the same endpoint and worktree"
 }
 
@@ -447,29 +368,6 @@ test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven() {
   assert_no_grep "/exit" "$dir/fake/literal" \
     "the exit command must not be typed when the composer state is not proven empty"
   pass "fm-control relaunch: an unreadable composer fails safe before the exit command is typed"
-}
-
-test_same_harness_relaunch_reapplies_configured_auto_permissions() {
-  local dir out rc literals
-  dir=$(new_case same-auto rl43)
-  add_ship_task "$dir" rl43 claude
-  mkdir -p "$dir/home/config"
-  printf 'auto\n' > "$dir/home/config/claude-permission-mode"
-
-  out=$(run_control "$dir" rl43 relaunch --note "restore unattended auto permissions"); rc=$?
-  expect_code 0 "$rc" "a configured-auto same-task relaunch should succeed"$'\n'"$out"
-  literals=$(cat "$dir/fake/literal")
-  assert_contains "$literals" "claude --permission-mode auto" \
-    "the replacement Claude must explicitly reapply configured auto permissions"
-  assert_not_contains "$literals" "--dangerously-skip-permissions" \
-    "the configured-auto relaunch must not fall back to bypass permissions"
-  [ "$(meta_field "$dir" rl43 window)" = "fmses:fm-rl43" ] \
-    || fail "the configured-auto relaunch must preserve its endpoint"
-  [ "$(meta_field "$dir" rl43 worktree)" = "$dir/wt" ] \
-    || fail "the configured-auto relaunch must preserve its isolated copy"
-  [ "$(meta_field "$dir" rl43 claude_permission_mode)" = auto ] \
-    || fail "the relaunch must record the auto posture it launched with, got '$(meta_field "$dir" rl43 claude_permission_mode)'"
-  pass "fm-control relaunch reapplies the selected Claude permission mode in the same endpoint and copy and records it"
 }
 
 test_relaunch_from_linked_home_preserves_recorded_worktree() {
@@ -1210,34 +1108,6 @@ test_missing_worktree_refuses_before_stopping_anything() {
   pass "fm-control relaunch: an unaccountable local copy refuses before the agent is touched"
 }
 
-# A relaunch stops the running agent before fm-spawn.sh would resolve the launch
-# posture, so an unparseable config/claude-permission-mode used to take the
-# worker down and only then refuse to replace it. The value must be resolved
-# before anything is stopped, leaving the live agent exactly where it was.
-test_unparseable_permission_mode_refuses_before_stopping_anything() {
-  local dir out rc before after
-  dir=$(new_case badperm rl44)
-  add_ship_task "$dir" rl44 claude
-  mkdir -p "$dir/home/config"
-  printf 'Bypass\n' > "$dir/home/config/claude-permission-mode"
-  before=$(cat "$dir/home/state/rl44.meta")
-
-  out=$(run_control "$dir" rl44 relaunch --note "x"); rc=$?
-  expect_code 1 "$rc" "an unparseable permission mode should refuse the relaunch"$'\n'"$out"
-  [ "$(cat "$dir/fake/command")" = claude ] \
-    || fail "an unparseable permission mode must leave the old agent running"
-  assert_no_grep "/exit" "$dir/fake/literal" \
-    "the exit command must not be typed before the permission mode is resolved"
-  after=$(cat "$dir/home/state/rl44.meta")
-  [ "$before" = "$after" ] \
-    || fail "a permission-mode refusal must leave the durable record byte-identical"
-  assert_contains "$out" "claude-permission-mode" \
-    "the refusal should name the file the captain has to repair"
-  assert_contains "$out" "agent is untouched" \
-    "the refusal should state that the running worker was left alone"
-  pass "fm-control relaunch: an unparseable permission mode refuses with the worker still alive"
-}
-
 test_missing_instructions_refuse_before_stopping_anything() {
   local dir out rc
   dir=$(new_case nobrief rl11)
@@ -1811,11 +1681,9 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
   pass "relaunch heals an item that drifted out of In flight while the task stayed live"
 }
 
-test_relaunch_refuses_an_ambiguous_top_level_claude_posture
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
-test_same_harness_relaunch_reapplies_configured_auto_permissions
 test_relaunch_from_linked_home_preserves_recorded_worktree
 test_relaunch_preserves_durable_task_metadata
 test_relaunch_serializes_concurrent_durable_metadata_publication
@@ -1844,7 +1712,6 @@ test_prefixed_prior_harness_wiring_is_still_retired
 test_muse_session_binding_is_retired_on_a_harness_switch
 test_cursor_session_binding_is_retired_on_a_harness_switch
 test_missing_worktree_refuses_before_stopping_anything
-test_unparseable_permission_mode_refuses_before_stopping_anything
 test_missing_instructions_refuse_before_stopping_anything
 test_checkpoint_refusal_leaves_the_record_byte_identical
 test_checkpoint_refuses_uninspectable_head_and_status

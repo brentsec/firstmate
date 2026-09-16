@@ -359,18 +359,9 @@ The token is the file's whitespace-trimmed content.
 `bypass` keeps today's launch, `claude --dangerously-skip-permissions`, and is also the default when the file is absent, so an unconfigured home launches byte-for-byte as before.
 `auto` replaces that flag with `--permission-mode auto`, Claude Code's classifier-reviewed permission mode, for a captain who refuses to run workers in bypass mode; every other part of the Claude launch, including its environment prefix, inline settings, model, and effort flags, is unchanged.
 Any other value, or an unreadable file, refuses every spawn from that home, whichever harness it would launch, before any endpoint, worktree, or task record exists, and names the accepted values; Firstmate never falls back to a permission posture the captain did not choose.
-That refusal covers launching only: a file the home cannot parse is not evidence about an already-running process, so existing workers keep their ordinary liveness state and the captain can still stop and interrupt the fleet while the value is repaired.
-A relaunch is a launch, so it is refused too - but `bin/fm-control.sh` resolves the value before it stops anything, so the refusal leaves the running worker untouched rather than stopping it and then failing to replace it.
-`bin/fm-claude-permission-lib.sh` owns parsing and the exact mode-to-flag mapping, and every Firstmate spawn or relaunch reads it fresh, so changing the file requires no Firstmate process restart and takes effect at the next Firstmate-owned launch.
-Each Claude launch records the mode it actually carried as `claude_permission_mode=` in the task's `state/<id>.meta` (`bin/fm-spawn.sh` owns the field), and every later posture check compares the running process against that recorded launch, never against the current file, so an edit changes only the next launch and never replaces a worker that still carries exactly the posture it was launched with.
-A terminal provider's native session restoration is not a Firstmate relaunch and may synthesize `claude --resume` without replaying the recorded permission flag.
-On Herdr, the policy-aware recovery state therefore checks the exact argv of the pane's top-level Claude process against the recorded mode, reports `permission-drift` when that flag is absent, reports `ambiguous` when that one process carries both permission flags, and routes one attributed drifted process through the ordinary transactional relaunch in its same endpoint and worktree.
-A nested `claude` command the worker runs from its own shell tool is a descendant of that process, never the worker, so it is neither drift nor ambiguity.
-A record with no recorded mode, a failed or malformed process read, or a build that reports no argv or an empty one is not evidence of drift: the endpoint keeps its proven live state and ordinary lifecycle control stays available.
-Generic process liveness still treats a drifted process as alive for duplicate prevention, and a temporary foreground tool does not become false drift.
+`bin/fm-spawn.sh` reads the file on every spawn and relaunch, so a change takes effect at the next launch without a restart.
 The file is a captain-wide safety preference, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract; a secondmate's own Claude crewmates then launch on the same posture.
-This setting controls worker command approval only; merge authority and destructive, irreversible, security-sensitive, and ask-user decisions remain under their separate Firstmate authority contracts.
-The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches, restoration recovery, and which once-per-machine dialog each mode can meet.
+The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches and which once-per-machine dialog each one can meet.
 
 ## Worker launch environment (config/launch-env-allowlist)
 

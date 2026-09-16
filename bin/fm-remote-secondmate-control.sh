@@ -124,7 +124,7 @@ state_value() { # <id>; prints recovery-grade state
     printf 'unverified\n'
     return 0
   fi
-  fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" 2>/dev/null || printf 'unreadable\n'
+  fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n'
 }
 
 print_route() { # <id>
@@ -173,20 +173,9 @@ cmd_launch() {
   meta=$(meta_path "$id")
   if [ -f "$meta" ]; then
     remote_endpoint_require "$id"
-    current=$(fm_backend_agent_state_for_meta "$REMOTE_ENDPOINT_META" 2>/dev/null || printf 'unreadable\n')
+    current=$(fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n')
     case "$current" in
       alive)
-        print_route "$id"
-        return 0
-        ;;
-      permission-drift)
-        # Conclusive argv evidence that the one attributed Claude process lost
-        # the posture its launch recorded. That is not a duplicate to refuse: it
-        # is the exact condition the relaunch verb below exists to repair, and
-        # bin/fm-bootstrap.sh already routes the remote sweep's copy of this
-        # state there. Ambiguity and every inconclusive read still refuse.
-        cmd_relaunch "$id" "$harness" "$model" "$effort" \
-          || die "remote endpoint lost its recorded permission posture and the safe relaunch failed"
         print_route "$id"
         return 0
         ;;

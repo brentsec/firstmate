@@ -19,12 +19,8 @@
 #   - The Herdr classifier preserves the proven husk mapping while separating a
 #     missing pane from an existing agent-less pane.
 #   - fm_backend_agent_alive preserves the older three-state compatibility view.
-#   - bin/fm-bootstrap.sh's secondmate_liveness_sweep fresh-spawns only dead or
-#     missing endpoints, and replaces one attributed Herdr Claude process whose
-#     exact argv lost the permission posture its own launch recorded (never one
-#     that merely disagrees with an edited config) only on proof that its worker
-#     is between turns - preserving and reporting a busy or unprovable one - then
-#     reports every drift outcome unconditionally, keeps already-live results
+#   - bin/fm-bootstrap.sh's secondmate_liveness_sweep recovers only dead or
+#     missing endpoints, keeps successful recovery and already-live results
 #     silent by default, and reports ambiguous and unreadable targets distinctly.
 #   - The sweep converges: once a secondmate reads alive, a later run never
 #     re-touches it (idempotent by construction, not by remembering what it
@@ -312,134 +308,6 @@ SH
   printf '%s\n' "$fakebin"
 }
 
-# make_liveness_herdr <dir>: a process-info fixture for the exact restored
-# Claude states the Herdr adapter exposes to the bootstrap sweep. The generic
-# pane-liveness pass and policy pass both read the same foreground process set,
-# whose group leader (pid 4101, the pane's foreground job) is the top-level
-# worker posture attribution anchors on; 4102 is a claude CLI that worker runs
-# from its own shell tool.
-make_liveness_herdr() {
-  local dir=$1 fakebin
-  fakebin=$(fm_fakebin "$dir")
-  cat > "$fakebin/herdr" <<'SH'
-#!/usr/bin/env bash
-set -u
-mode=${FM_TEST_HERDR_CLAUDE_STATE:-drift}
-pane=${FM_TEST_HERDR_PANE_ID:-w1:p1}
-case "${1:-} ${2:-}" in
-  "pane get")
-    printf '{"result":{"pane":{"pane_id":"%s"}}}\n' "$pane"
-    ;;
-  "agent get")
-    printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n'
-    ;;
-  "pane process-info")
-    case "$mode" in
-      drift)
-        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session"]}]'
-        ;;
-      alive)
-        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"]}]'
-        ;;
-      ambiguous)
-        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session","--dangerously-skip-permissions","--permission-mode","auto"]}]'
-        ;;
-      nested)
-        foreground='[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"]},{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","-p","summarize the diff"]}]'
-        ;;
-      drift-nested)
-        foreground='[{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--version"]},{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--resume","restored-session"]}]'
-        ;;
-      *) exit 1 ;;
-    esac
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_process_group_id":4101,"foreground_processes":%s}}}\n' \
-      "$pane" "$$" "$foreground"
-    ;;
-  *) exit 1 ;;
-esac
-SH
-  chmod +x "$fakebin/herdr"
-  printf '%s\n' "$fakebin"
-}
-
-# write_recovery_stubs <root>: replace exactly the two replacement routes the
-# sweep can reach, so a run shows which one it chose and what it reported.
-#   fm-control.sh - the same-task local relaunch, the only route a locally
-#     placed live mate may be replaced through. Its exit status is selectable
-#     so the sweep's honest failure report is observable too.
-#   fm-spawn.sh - the fresh-spawn/remote route. It deliberately fails by
-#     default, so a local drift that reaches it is visible as the wrong choice;
-#     a remote test that legitimately expects it sets FM_TEST_SPAWN_RC=0.
-write_recovery_stubs() {
-  local root=$1
-  cat > "$root/bin/fm-control.sh" <<'SH'
-#!/usr/bin/env bash
-set -u
-printf '%s\n' "$*" >> "${FM_TEST_CONTROL_LOG:?}"
-[ -z "${FM_TEST_CONTROL_OUT:-}" ] || printf '%s\n' "$FM_TEST_CONTROL_OUT"
-exit "${FM_TEST_CONTROL_RC:-0}"
-SH
-  cat > "$root/bin/fm-spawn.sh" <<'SH'
-#!/usr/bin/env bash
-set -u
-printf '%s\n' "$*" >> "${FM_TEST_SPAWN_LOG:?}"
-exit "${FM_TEST_SPAWN_RC:-91}"
-SH
-  chmod +x "$root/bin/fm-control.sh" "$root/bin/fm-spawn.sh"
-}
-
-# arm_busy_state <state-dir> <id> <busy|idle>: put the mate's semantic turn
-# state on disk through bin/fm-busy-event.sh, the contract's only writer, so
-# the sweep reads it back through the real classifier.
-arm_busy_state() {
-  local state=$1 id=$2 want=$3
-  "$ROOT/bin/fm-busy-event.sh" arm "$state" "$id" \
-    --state "$want" --source fm-spawn --event launch-brief >/dev/null
-}
-
-# make_control_probe_root <dir>: an exact copy of the public bootstrap tree with
-# only those recovery entry points replaced, so the routing decision a run
-# observes is the sweep's real one.
-make_control_probe_root() {
-  local dir=$1 root
-  root="$dir/runtime-root"
-  mkdir -p "$root"
-  cp -R "$ROOT/bin" "$root/bin"
-  printf '# Firstmate fixture\n' > "$root/AGENTS.md"
-  write_recovery_stubs "$root"
-  printf '%s\n' "$root"
-}
-
-# A remote liveness check calls the route-local fm-on sibling, so the same copy
-# additionally replaces that transport boundary. The stub records every remote
-# request and returns the selected state.
-make_remote_control_probe_root() {
-  local dir=$1 root
-  root="$dir/remote-runtime-root"
-  mkdir -p "$root"
-  cp -R "$ROOT/bin" "$root/bin"
-  printf '# Firstmate fixture\n' > "$root/AGENTS.md"
-  write_recovery_stubs "$root"
-  cat > "$root/bin/fm-on.sh" <<'SH'
-#!/usr/bin/env bash
-set -u
-printf '%s\n' "$*" >> "${FM_TEST_REMOTE_CALL_LOG:?}"
-case "$*" in
-  "sm1 fm-remote-doctor.sh") exit 0 ;;
-  "sm1 fm-remote-secondmate-control.sh state sm1")
-    printf '%s\n' "${FM_TEST_REMOTE_AGENT_STATE:-permission-drift}"
-    ;;
-  "sm1 fm-remote-secondmate-control.sh observe sm1")
-    printf '%s\n' "${FM_TEST_REMOTE_OBSERVE:-idle}"
-    ;;
-  "sm1 fm-remote-secondmate-control.sh relaunch sm1 "*) exit 0 ;;
-  *) exit 0 ;;
-esac
-SH
-  chmod +x "$root/bin/fm-on.sh"
-  printf '%s\n' "$root"
-}
-
 # new_world <name>: a scratch firstmate HOME (state/, watcher beacon, pinned
 # harness) with no kind=secondmate meta yet. FM_ROOT is left to resolve
 # naturally to the real checkout under test ($ROOT), exactly as production
@@ -484,13 +352,79 @@ run_bootstrap() {  # <fakebin> <home> <pane-cmd> <call-log> [extra env...] -> st
     env "$@" "$ROOT/bin/fm-bootstrap.sh" 2>&1
 }
 
-# Same run, executed from a probe root's own copy of the tree so every sibling
-# script the sweep reaches for is that copy's.
-run_bootstrap_from() {  # <root> <fakebin> <home> <pane-cmd> <call-log> [extra env...] -> stdout
-  local root=$1 fb=$2 home=$3 cmd=$4 log=$5; shift 5
-  PATH="$fb:$BASE_PATH" TMUX='' FM_BACKEND=tmux FM_HOME="$home" \
-    FM_ROOT_OVERRIDE="$root" FM_TEST_PANE_CMD="$cmd" FM_TMUX_CALL_LOG="$log" \
-    env "$@" "$root/bin/fm-bootstrap.sh" 2>&1
+# make_nested_claude_herdr <dir>: a `herdr` stub for ONE pane whose registered
+# Claude agent is live and whose foreground process group also holds a nested
+# `claude` command the worker itself ran. Answers by subcommand rather than by
+# call order, because the sweep's call count is not part of any contract.
+make_nested_claude_herdr() {
+  local dir=$1 fakebin
+  fakebin=$(fm_fakebin "$dir")
+  cat > "$fakebin/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '{"client":{"version":"0.8.2","protocol":20},"server":{"running":true}}\n' ;;
+  "pane get")
+    printf '{"result":{"pane":{"pane_id":"w1:p1"}}}\n' ;;
+  "agent get")
+    printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' ;;
+  "pane process-info")
+    printf '%s\n' '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":4100,"foreground_process_group_id":4101,"foreground_processes":[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"],"cmdline":"claude --dangerously-skip-permissions --resume restored-session"},{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","-p","summarize the diff"],"cmdline":"claude -p summarize the diff"}]}}}' ;;
+  *) ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/herdr"
+  printf '%s\n' "$fakebin"
+}
+
+# make_spawn_probe_root <dir>: an FM_ROOT holding only the recovery entry point
+# the sweep reaches for, so any relaunch attempt is recorded and fails loudly.
+make_spawn_probe_root() {
+  local dir=$1 root
+  root="$dir/runtime-root"
+  mkdir -p "$root/bin"
+  printf '# Firstmate fixture\n' > "$root/AGENTS.md"
+  cat > "$root/bin/fm-spawn.sh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${FM_TEST_SPAWN_LOG:?}"
+exit 91
+SH
+  chmod +x "$root/bin/fm-spawn.sh"
+  printf '%s\n' "$root"
+}
+
+# A Claude worker's own shell tool may run a nested `claude` command inside the
+# pane's foreground process group, and that nested command carries none of the
+# launch flags the worker was started with. It is a descendant of the attributed
+# worker, never the worker, so the endpoint stays plainly alive and the sweep
+# has nothing to do with it.
+test_sweep_leaves_a_live_claude_with_a_nested_claude_command_alone() {
+  local w fb tmuxfb herdrfb root spawn_log out
+  command -v jq >/dev/null 2>&1 || { pass "SKIP (no jq): nested claude command under a live Claude secondmate"; return; }
+  w=$(new_world sweep-nested-claude)
+  add_sm_home "$w" sm1 lab:w1:p1 claude
+  printf 'backend=herdr\n' >> "$w/home/state/sm1.meta"
+  printf 'claude\n' > "$w/home/config/secondmate-harness"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
+  herdrfb=$(make_nested_claude_herdr "$w")
+  root=$(make_spawn_probe_root "$w")
+  spawn_log="$w/spawn.log"; : > "$spawn_log"
+
+  out=$(PATH="$herdrfb:$BASE_PATH" bash -c \
+    '. "$0/bin/fm-backend.sh"; fm_backend_agent_state herdr lab:w1:p1' "$ROOT")
+  [ "$out" = alive ] \
+    || fail "a registered Claude worker running a nested claude command must read alive, got '$out'"
+
+  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
+    FM_ROOT_OVERRIDE="$root" FM_TEST_SPAWN_LOG="$spawn_log")
+
+  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
+    "a live secondmate beside a nested claude command needs no liveness diagnostic"
+  [ ! -s "$spawn_log" ] \
+    || fail "a nested claude command triggered a relaunch: $(cat "$spawn_log")"
+  pass "sweep: a live Claude secondmate running a nested claude command reads alive and is left alone"
 }
 
 test_sweep_respawns_confirmed_dead_secondmate() {
@@ -529,331 +463,6 @@ test_sweep_leaves_alive_secondmate_untouched() {
     "verbose diagnostics should identify the already-live outcome"
   [ ! -s "$log" ] || fail "verbose reporting must not touch an already-live secondmate: $(cat "$log")"
   pass "sweep: an already-live secondmate is untouched and distinguishable in verbose diagnostics"
-}
-
-# A drifted worker is the one live population this sweep may replace, and it may
-# only do so on proof that the worker is between turns. A recorded idle is that
-# proof, and the replacement is the same-task control relaunch, never a fresh
-# spawn - and the captain is told it happened, because the endpoint record any
-# earlier digest printed is now superseded.
-test_sweep_replaces_a_proven_idle_drifted_claude_in_place() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-permission-drift)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  arm_busy_state "$w/home/state" sm1 idle
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: relaunched after the live Claude process lacks the permission posture its launch recorded (backend=herdr)" \
-    "replacing a live worker must be reported, never left to a verbose-only fact"
-  [ "$(cat "$log")" = "sm1 relaunch" ] \
-    || fail "a proven-idle permission drift did not use the same-task control relaunch: $(cat "$log")"
-  [ ! -s "$spawn_log" ] \
-    || fail "permission drift used the fresh-spawn path instead of preserving the exact endpoint and copy"
-  pass "sweep: a proven-idle Claude permission drift is relaunched in place and reported"
-}
-
-# The other side of that proof: a worker mid-turn, and a worker whose turn state
-# this home cannot prove at all, are both left running. Neither may be stopped on
-# a guess, and both are reported with the command that owns the supervised
-# replacement, so the drift never disappears silently.
-test_sweep_preserves_a_drifted_claude_it_cannot_prove_is_between_turns() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-drift-preserved)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  arm_busy_state "$w/home/state" sm1 busy
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: skipped: the live Claude process lacks the permission posture its launch recorded, and its worker is mid-turn, so it was left running; replace it under supervision with bin/fm-control.sh sm1 relaunch (backend=herdr)" \
-    "a mid-turn drifted worker must be preserved and reported with its supervised route"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "a mid-turn drifted worker was stopped anyway: control=$(cat "$log") spawn=$(cat "$spawn_log")"
-
-  rm -f "$w/home/state/sm1.busy-state" "$w/home/state/sm1.busy-gen"
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: skipped: the live Claude process lacks the permission posture its launch recorded, and this home cannot prove its worker is between turns, so it was left running; replace it under supervision with bin/fm-control.sh sm1 relaunch (backend=herdr)" \
-    "an unprovable turn state must never be promoted to idle"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "a drifted worker with no turn-state proof was stopped anyway: control=$(cat "$log") spawn=$(cat "$spawn_log")"
-  pass "sweep: a busy or unprovable drifted worker is left running and reported for supervised replacement"
-}
-
-# A replacement that was attempted and failed is NOT an untouched mate: the old
-# worker was already stopped, so the report must not reuse the left-running
-# wording that tells the captain the endpoint is still good.
-test_sweep_reports_a_failed_drift_replacement_as_a_failure() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-drift-failed)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  arm_busy_state "$w/home/state" sm1 idle
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log" \
-    FM_TEST_CONTROL_RC=1 FM_TEST_CONTROL_OUT="error: the replacement never came up")
-
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: relaunch failed after the live Claude process lacks the permission posture its launch recorded: error: the replacement never came up" \
-    "a failed replacement must be reported as a failure with its reason"
-  assert_not_contains "$out" "so it was left running" \
-    "a stopped-then-failed worker must never be reported as still running"
-  assert_not_contains "$out" "relaunched after" \
-    "a failed replacement must never be reported as completed"
-  pass "sweep: a drift replacement that was attempted and failed is reported as a failure, not as an untouched mate"
-}
-
-test_sweep_refuses_ambiguous_restored_claude_processes() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-permission-ambiguous)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=ambiguous FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_contains "$out" "skipped: existing endpoint has ambiguous agent process" \
-    "a top-level Claude process carrying both permission flags should be reported as ambiguous"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "an ambiguous restored Claude posture triggered lifecycle work"
-  pass "sweep: an ambiguous restored Claude posture refuses every automatic recovery action"
-}
-
-# A worker's own shell tool may run a nested claude CLI inside the pane's
-# foreground group. It is a descendant of the attributed worker, never the
-# worker, so the sweep leaves a conforming worker alone beside it and still
-# relaunches a genuinely drifted worker beside a conforming child.
-test_sweep_ignores_a_nested_claude_cli_under_a_conforming_worker() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-nested-cli)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=nested FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
-    "a conforming worker running a nested claude CLI must read as plainly alive"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "a nested claude CLI under a conforming worker triggered lifecycle work: $(cat "$log" "$spawn_log")"
-  pass "sweep: a nested claude CLI under a conforming worker is never drift or ambiguity"
-}
-
-test_sweep_relaunches_top_level_drift_beside_a_nested_conforming_claude() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-drift-nested)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  arm_busy_state "$w/home/state" sm1 idle
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift-nested FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: relaunched after the live Claude process lacks the permission posture its launch recorded (backend=herdr)" \
-    "a completed replacement of a drifted worker must be reported"
-  [ "$(cat "$log")" = "sm1 relaunch" ] \
-    || fail "top-level drift beside a nested conforming claude CLI did not relaunch in place: $(cat "$log")"
-  [ ! -s "$spawn_log" ] \
-    || fail "top-level drift took the fresh-spawn route: $(cat "$spawn_log")"
-  pass "sweep: genuine top-level drift still replaces the worker beside a nested conforming claude CLI"
-}
-
-# The expectation is the recorded launch, not the current file: editing
-# config/claude-permission-mode while the fleet runs must not make the sweep
-# replace a worker that still carries exactly the posture it was launched with.
-test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-config-edit)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\nclaude_permission_mode=bypass\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  printf 'auto\n' > "$w/home/config/claude-permission-mode"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=alive FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
-    "a worker still carrying its recorded posture must stay silent after a config edit"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "a config edit alone replaced a correctly launched running worker: control=$(cat "$log") spawn=$(cat "$spawn_log")"
-  pass "sweep: a config edit changes only the next launch and never relaunches a conforming worker"
-}
-
-# A record written before the launch posture existed carries no conclusive
-# expectation, so even a restored-looking argv is not drift: the generic live
-# reading stands until the next Firstmate-owned launch records one.
-test_sweep_needs_a_recorded_posture_before_calling_drift() {
-  local w fb tmuxfb herdrfb root log spawn_log out
-  w=$(new_world sweep-claude-unrecorded)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\nspawn_gen=g7\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  printf 'bypass\n' > "$w/home/config/claude-permission-mode"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w"); herdrfb=$(make_liveness_herdr "$w")
-  root=$(make_control_probe_root "$w")
-  log="$w/control.log"; spawn_log="$w/spawn.log"; : > "$log"; : > "$spawn_log"
-
-  out=$(run_bootstrap_from "$root" "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_TEST_HERDR_CLAUDE_STATE=drift FM_TEST_HERDR_PANE_ID=w1:p1 \
-    FM_TEST_CONTROL_LOG="$log" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
-    "an unrecorded posture must not produce a liveness diagnostic"
-  [ ! -s "$log" ] && [ ! -s "$spawn_log" ] \
-    || fail "a record with no launch posture was relaunched from the current config: control=$(cat "$log") spawn=$(cat "$spawn_log")"
-  pass "sweep: drift needs a recorded launch posture, never the current config alone"
-}
-
-# Placement changes the transport of both halves, never the rule: a drifted
-# remote mate is just as live as a local one, so it is replaced only on the
-# host's own proof that its worker is between turns, and then through the one
-# validated remote route the dead and missing endpoints already use. A busy or
-# unreadable observation preserves the worker, and ambiguity still licenses
-# nothing at all.
-test_remote_sweep_relaunches_drift_and_refuses_ambiguity() {
-  local w fb tmuxfb root remote_log spawn_log out
-  w=$(new_world sweep-remote-claude-permission)
-  add_sm_home "$w" sm1 remote:sm1 claude
-  cat >> "$w/home/state/sm1.meta" <<'EOF'
-remote_host=remote.test
-remote_root=/srv/firstmate
-remote_backend=herdr
-remote_target=fm-remote:w1:p1
-EOF
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
-  root=$(make_remote_control_probe_root "$w")
-  remote_log="$w/remote.log"; spawn_log="$w/spawn.log"
-
-  remote_drift_sweep() {  # <extra env...>
-    : > "$remote_log"; : > "$spawn_log"
-    PATH="$tmuxfb:$fb:$BASE_PATH" TMUX='' FM_BACKEND=tmux FM_HOME="$w/home" \
-      FM_ROOT_OVERRIDE="$root" FM_TEST_REMOTE_CALL_LOG="$remote_log" \
-      FM_TEST_SPAWN_LOG="$spawn_log" FM_TEST_CONTROL_LOG="$w/control.log" \
-      env "$@" "$root/bin/fm-bootstrap.sh" 2>&1
-  }
-
-  out=$(remote_drift_sweep FM_TEST_REMOTE_AGENT_STATE=permission-drift \
-    FM_TEST_REMOTE_OBSERVE=idle FM_TEST_SPAWN_RC=0)
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: relaunched after the live Claude process lacks the permission posture its launch recorded (host=remote.test)" \
-    "a completed remote replacement must be reported"
-  [ "$(cat "$spawn_log")" = "sm1 --secondmate" ] \
-    || fail "remote permission drift did not use the one validated remote recovery route: $(cat "$spawn_log")"
-  grep -F "fm-remote-secondmate-control.sh relaunch" "$remote_log" >/dev/null \
-    && fail "the sweep crossed the transport itself instead of using the remote recovery route"
-
-  out=$(remote_drift_sweep FM_TEST_REMOTE_AGENT_STATE=permission-drift \
-    FM_TEST_REMOTE_OBSERVE=busy FM_TEST_SPAWN_RC=0)
-  assert_contains "$out" "SECONDMATE_LIVENESS: secondmate sm1: skipped: the live Claude process lacks the permission posture its launch recorded, and its worker is mid-turn, so it was left running; replace it under supervision with bin/fm-spawn.sh sm1 --secondmate (host=remote.test)" \
-    "a mid-turn remote worker must be preserved and reported with its supervised route"
-  [ ! -s "$spawn_log" ] || fail "a mid-turn remote worker was replaced anyway: $(cat "$spawn_log")"
-
-  out=$(remote_drift_sweep FM_TEST_REMOTE_AGENT_STATE=permission-drift \
-    FM_TEST_REMOTE_OBSERVE=fallback-idle FM_TEST_SPAWN_RC=0)
-  assert_contains "$out" "and this home cannot prove its worker is between turns, so it was left running; replace it under supervision with bin/fm-spawn.sh sm1 --secondmate (host=remote.test)" \
-    "a weak rendered idle must never be promoted to proof that the worker is between turns"
-  [ ! -s "$spawn_log" ] || fail "a weak rendered idle replaced the remote worker: $(cat "$spawn_log")"
-
-  out=$(remote_drift_sweep FM_TEST_REMOTE_AGENT_STATE=ambiguous FM_TEST_SPAWN_RC=0)
-  assert_contains "$out" "skipped: remote endpoint state is ambiguous on remote.test" \
-    "a remote ambiguous Claude posture should be reported as ambiguous"
-  grep -F "fm-remote-secondmate-control.sh observe" "$remote_log" >/dev/null \
-    && fail "remote ambiguity paid for a turn-state observation it may not act on"
-  [ ! -s "$spawn_log" ] || fail "remote ambiguity triggered a replacement"
-  pass "remote sweep: a drifted Claude is replaced only on the host's own proof it is between turns, while ambiguity refuses lifecycle work"
-}
-
-# The captain's documented remote recovery entry point is fm-spawn --secondmate,
-# which reaches the host-local `launch` verb. Now that verb resolves the
-# recovery-grade state, a restored Claude that lost its recorded posture arrives
-# as permission-drift. That is one attributed process, not a duplicate to refuse:
-# it is exactly what the sibling relaunch verb repairs, so launch must route it
-# there. Ambiguity - which licenses no lifecycle action anywhere - still refuses.
-#
-# The control script's own dispatch is executed; only the backend verdict and the
-# replacement leg are replaced, so the routing decision under test is the real one.
-test_remote_launch_recovers_permission_drift_and_still_refuses_ambiguity() {
-  local w home log outfile out rc
-  w=$(new_world remote-launch-drift)
-  home="$w/remote-home"
-  mkdir -p "$home/bin" "$home/state/parent-route"
-  printf 'sm1\n' > "$home/.fm-secondmate-home"
-  printf '# Firstmate\n' > "$home/AGENTS.md"
-  : > "$home/state/parent-route/sm1.meta"
-  log="$w/relaunch.log"; : > "$log"
-  outfile="$w/launch.out"
-
-  # Not a command substitution: the exit status of the launch under test is the
-  # assertion, and a subshell would not carry it back.
-  exercise_remote_launch() {  # <state>; writes $outfile, sets rc
-    rc=0
-    FM_HOME="$home" FM_TEST_STATE="$1" FM_TEST_RELAUNCH_LOG="$log" bash -c '
-      . "$1" state sm1 >/dev/null 2>&1
-      fm_backend_agent_state_for_meta() { printf "%s" "$FM_TEST_STATE"; }
-      remote_endpoint_require() { REMOTE_ENDPOINT_META="$FM_HOME/state/parent-route/$1.meta"; }
-      cmd_relaunch() { printf "relaunch %s\n" "$*" >> "$FM_TEST_RELAUNCH_LOG"; }
-      print_route() { printf "route=%s\n" "$1"; }
-      cmd_launch sm1 claude - - herdr
-    ' _ "$ROOT/bin/fm-remote-secondmate-control.sh" > "$outfile" 2>&1 || rc=$?
-    out=$(cat "$outfile")
-  }
-
-  exercise_remote_launch permission-drift
-  [ "$rc" = 0 ] || fail "a drifted remote mate must be recovered, not refused (rc $rc): $out"
-  assert_contains "$(cat "$log")" "relaunch sm1 claude - -" \
-    "remote launch did not route permission drift through the relaunch verb"
-  assert_contains "$out" "route=sm1" "a recovered remote launch did not print its route"
-
-  : > "$log"
-  exercise_remote_launch ambiguous
-  [ "$rc" != 0 ] || fail "an ambiguous remote endpoint must refuse the launch: $out"
-  [ ! -s "$log" ] || fail "remote ambiguity triggered a relaunch: $(cat "$log")"
-
-  : > "$log"
-  exercise_remote_launch unreadable
-  [ "$rc" != 0 ] || fail "an unreadable remote endpoint must refuse the launch: $out"
-  [ ! -s "$log" ] || fail "an unreadable remote endpoint triggered a relaunch: $(cat "$log")"
-
-  unset -f exercise_remote_launch
-  pass "remote launch: proven permission drift recovers through relaunch while ambiguity and unreadability refuse"
 }
 
 test_sweep_respawns_authoritatively_missing_pi_secondmate() {
@@ -1012,16 +621,7 @@ test_herdr_agent_state_preserves_husk_classifier
 test_agent_state_dispatcher_and_compatibility
 test_sweep_respawns_confirmed_dead_secondmate
 test_sweep_leaves_alive_secondmate_untouched
-test_sweep_replaces_a_proven_idle_drifted_claude_in_place
-test_sweep_preserves_a_drifted_claude_it_cannot_prove_is_between_turns
-test_sweep_reports_a_failed_drift_replacement_as_a_failure
-test_sweep_refuses_ambiguous_restored_claude_processes
-test_sweep_ignores_a_nested_claude_cli_under_a_conforming_worker
-test_sweep_relaunches_top_level_drift_beside_a_nested_conforming_claude
-test_sweep_leaves_a_correctly_launched_worker_alone_after_a_config_edit
-test_sweep_needs_a_recorded_posture_before_calling_drift
-test_remote_sweep_relaunches_drift_and_refuses_ambiguity
-test_remote_launch_recovers_permission_drift_and_still_refuses_ambiguity
+test_sweep_leaves_a_live_claude_with_a_nested_claude_command_alone
 test_sweep_respawns_authoritatively_missing_pi_secondmate
 test_sweep_respawns_authoritatively_missing_pi_signed_secondmate
 test_sweep_never_acts_on_ambiguous_existing_process

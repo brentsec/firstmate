@@ -20,7 +20,7 @@
 #                 "SECONDMATE_SYNC: secondmate <id>: skipped: <reason>",
 #                 "NUDGE_SECONDMATES: secondmate <id>: send failed: <reason>",
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
-#                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed after <cause>: <reason>|relaunch failed after <cause>: <reason>|relaunched after <cause> (<where>)",
+#                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed after <cause>: <reason>",
 #                 "SECONDMATE_HANDOFF: secondmate <id>: pending delivery: <n> item(s)",
 #                 "FMX: X mode on ..." or "FMX: X mode off ...".
 #          When a RUNNING secondmate home is fast-forwarded, its target is
@@ -47,13 +47,7 @@
 #          recovery-grade state owned by bin/fm-backend.sh's
 #          fm_backend_agent_state: skipped distinguishes an existing ambiguous
 #          process, an unreadable target, and an unverified backend; respawn
-#          failed names whether the endpoint was missing or agent-less. A live
-#          Claude process whose exact argv lacks the permission posture its own
-#          launch recorded (claude_permission_mode= in its record) is replaced
-#          transactionally in its same endpoint and home through fm-control
-#          rather than trusted as alive or killed as agent-less; a config edit
-#          alone never qualifies, because the expectation is the recorded
-#          launch, not the current file.
+#          failed names whether the endpoint was missing or agent-less.
 #          Already-live and successfully relaunched secondmates are silent
 #          unless FM_BOOTSTRAP_VERBOSE_FACTS=1 requests BOOTSTRAP_INFO facts.
 #          A TANGLE line means the firstmate primary checkout (FM_ROOT) is stranded
@@ -191,8 +185,6 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-x-lib.sh"
 # shellcheck source=bin/fm-backend.sh disable=SC1091
 . "$SCRIPT_DIR/fm-backend.sh"
-# shellcheck source=bin/fm-busy-lib.sh disable=SC1091
-. "$SCRIPT_DIR/fm-busy-lib.sh"
 # shellcheck source=bin/fm-remote-readiness-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-remote-readiness-lib.sh"
 # fm-timing-lib.sh is inert unless FM_TIMING_LOG names a file, which only the
@@ -683,78 +675,6 @@ report_relaunch() {  # <id> <cause> <where>
   echo "BOOTSTRAP_INFO: secondmate $1 relaunched after $2 ($3)"
 }
 
-# The drifted worker's turn state, as busy|idle|unknown, asked with the
-# strongest signal the asking home actually holds. A LOCAL mate's lifecycle
-# record lives in this home, so bin/fm-busy-lib.sh - the one owner of the
-# semantic busy contract - answers, and its rule that only a recorded verdict
-# proves idle carries over unchanged. A REMOTE mate's worker is observable only
-# from its own host, so the host-local `observe` verb answers over the same
-# transport every other remote read uses. Anything that is not exactly busy or
-# idle - a weak rendered `fallback-idle`, an unreadable endpoint, an
-# unreachable host - is unknown, never idle.
-secondmate_drift_turn_state() {  # <id> <meta> <remote-host>
-  local id=$1 meta=$2 remote_host=$3 out
-  if [ -n "$remote_host" ]; then
-    out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-on.sh" "$id" \
-      fm-remote-secondmate-control.sh observe "$id" < /dev/null 2>/dev/null) \
-      || { printf 'unknown'; return 0; }
-    out=$(printf '%s\n' "$out" | tail -1)
-  else
-    out=$(fm_busy_classify_meta "$meta" "$id" "$STATE" 2>/dev/null) || out=''
-    out=${out%% *}
-  fi
-  case "$out" in
-    busy|idle) printf '%s' "$out" ;;
-    *) printf 'unknown' ;;
-  esac
-}
-
-# A drifted worker is LIVE, and this sweep is the only place that replaces a
-# live mate, so it does that only on a verdict proving the worker is between
-# turns. Nothing weaker licenses the stop: a busy worker and one whose turn
-# state this home cannot prove are both preserved and reported with the
-# supervised route that owns their placement. A proven-idle worker is replaced
-# through the same single validated route the dead|missing arms already use for
-# that placement - bin/fm-control.sh's same-task relaunch locally, and
-# bin/fm-spawn.sh --secondmate remotely, whose host-local `launch` verb routes
-# permission-drift into its own relaunch - so no profile, effort token, or Ultra
-# rule is resolved a second time here. Every outcome is reported unconditionally,
-# because a mate that was replaced and a mate that was left drifted are both
-# facts the captain has to act on before trusting the endpoint.
-secondmate_drift_recover() {  # <id> <meta> <remote-host> <where>
-  local id=$1 meta=$2 remote_host=$3 where=$4 turn out cause route rc=0
-  cause="the live Claude process lacks the permission posture its launch recorded"
-  if [ -n "$remote_host" ]; then
-    route="bin/fm-spawn.sh $id --secondmate"
-  else
-    route="bin/fm-control.sh $id relaunch"
-  fi
-  turn=$(secondmate_drift_turn_state "$id" "$meta" "$remote_host")
-  case "$turn" in
-    busy)
-      echo "SECONDMATE_LIVENESS: secondmate $id: skipped: $cause, and its worker is mid-turn, so it was left running; replace it under supervision with $route ($where)"
-      return 0
-      ;;
-    idle) ;;
-    *)
-      echo "SECONDMATE_LIVENESS: secondmate $id: skipped: $cause, and this home cannot prove its worker is between turns, so it was left running; replace it under supervision with $route ($where)"
-      return 0
-      ;;
-  esac
-  if [ -n "$remote_host" ]; then
-    out=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1) || rc=$?
-  else
-    out=$(FM_SPAWN_NO_GUARD=1 FM_HOME="$FM_HOME" \
-      "$FM_ROOT/bin/fm-control.sh" "$id" relaunch 2>&1) || rc=$?
-  fi
-  if [ "$rc" -ne 0 ]; then
-    echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
-    return 0
-  fi
-  secondmate_note_respawned "$id"
-  echo "SECONDMATE_LIVENESS: secondmate $id: relaunched after $cause ($where)"
-}
-
 secondmate_liveness_sweep() {
   # Idempotent secondmate liveness guarantee - SESSION START ONLY. The detailed
   # state machine and its only recovery-authorizing states are owned by
@@ -765,10 +685,8 @@ secondmate_liveness_sweep() {
   # lacked.
   # A meta with no window remains owned by secondmate-provisioning recovery.
   # Secondmate homes never contain kind=secondmate meta, so this is naturally a
-  # primary-only no-op there. Mid-session process disappearance still uses the
-  # ordinary supervision path; Claude permission drift is the narrow exception
-  # detected on every watcher poll because an idle mate otherwise has no stale
-  # cadence.
+  # primary-only no-op there. Mid-session liveness remains explicitly out of
+  # scope and requires a separate periodic signal.
   [ -d "$STATE" ] || return 0
   local meta id remote_host label __fm_timing_stamp parallel=0
   SECONDMATE_RESPAWNED_IDS=""
@@ -872,9 +790,6 @@ secondmate_liveness_one() {  # <meta> <id>
           echo "SECONDMATE_LIVENESS: secondmate $id: respawn failed after $cause: $(first_line "$out")"
         fi
         ;;
-      permission-drift)
-        secondmate_drift_recover "$id" "$meta" "$remote_host" "host=$remote_host"
-        ;;
       ambiguous|unreadable|unverified)
         echo "SECONDMATE_LIVENESS: secondmate $id: skipped: remote endpoint state is $agent_state on $remote_host"
         ;;
@@ -885,7 +800,7 @@ secondmate_liveness_one() {  # <meta> <id>
   backend=$(fm_backend_of_meta "$meta")
   target=$(fm_backend_target_of_meta "$meta")
   [ -n "$target" ] || target="$window"
-  agent_state=$(fm_backend_agent_state_for_meta "$meta" 2>/dev/null) || agent_state=unreadable
+  agent_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || agent_state=unreadable
   case "$harness" in
     claude|codex|opencode|pi|pi-signed|grok|kimi|omp) ;;
     *)
@@ -911,9 +826,6 @@ secondmate_liveness_one() {  # <meta> <id>
       else
         echo "SECONDMATE_LIVENESS: secondmate $id: respawn failed after $cause: $(first_line "$out")"
       fi
-      ;;
-    permission-drift)
-      secondmate_drift_recover "$id" "$meta" '' "backend=$backend"
       ;;
     ambiguous)
       echo "SECONDMATE_LIVENESS: secondmate $id: skipped: existing endpoint has ambiguous agent process (backend=$backend)"
