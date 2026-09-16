@@ -42,11 +42,14 @@ commands:
 # default branch.
 test:
   instructions: |
-    Run `bin/fm-test-run.sh --changed` (documented in CONTRIBUTING.md) to
-    select and execute only the executable behavioral tests relevant to this
-    branch's diff, plus any other test that directly exercises the changed
-    behavior if the mapping misses it. Record the exact command run and its
-    pass/fail output as evidence before reporting the step done.
+    Judge which executable behavioral tests actually exercise this branch's
+    changed behavior, then run only those. Prefer the narrowest selection that
+    still covers the change, such as the single subject script the diff touches
+    (`bin/fm-test-run.sh tests/<subject>.test.sh`).
+    When the relevant tests are unclear, `bin/fm-test-run.sh --changed`
+    (documented in CONTRIBUTING.md) is available as an optional upper bound to
+    consult and narrow down from; it is never a required floor and never a step
+    that must always run.
     Never run `--all` or otherwise walk the entire tests/ suite locally:
     GitHub CI already owns full deterministic regression coverage.
   evidence:
