@@ -1,0 +1,24 @@
+# Is the --check-coverage locale failure introduced by this branch?
+
+$ git diff --stat b6104e3d HEAD -- bin/fm-test-run.sh
+ bin/fm-test-run.sh | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+$ git checkout b6104e3d -- bin/fm-test-run.sh   # fork main copy of the runner
+$ bin/fm-test-run.sh --check-coverage   (fork main runner, LANG=en_US.UTF-8)
+comm: file 2 is not in sorted order
+comm: input is not in sorted order
+(exit=1)
+
+$ git checkout HEAD -- bin/fm-test-run.sh   # back to the branch runner
+$ bin/fm-test-run.sh --check-coverage   (branch runner, LANG=en_US.UTF-8)
+comm: file 2 is not in sorted order
+comm: input is not in sorted order
+(exit=1)
+
+$ LC_ALL=C bin/fm-test-run.sh --check-coverage   (branch runner, C locale)
+FM_TEST_COVERAGE ok total=206 parallel=24 parallel_max_ms=417163 parallel_imbalance_ms=2894 parallel_unhinted=0 serial=166 serial_shards=5 serial_unhinted=18 herdr=16
+(exit=0)
+
+$ git status --porcelain
+(clean)

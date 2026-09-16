@@ -1,0 +1,19 @@
+# Live Claude Code sessions in the firstmate home (.claude/skills -> ../.agents/skills)
+# Each run: claude -p '<prompt>' --allowed-tools '' --output-format json
+
+$ claude -p "/bro"   [model claude-opus-5[1m]]
+  is_error=False num_turns=1
+  result:
+    Captain, there's nothing to restate - this is the first message of the session, so I haven't said anything yet.
+    
+    What do you need?
+
+$ claude -p "/unslop"   [model claude-haiku-4-5]
+  is_error=False num_turns=1
+  result:
+    Captain, I'm ready to unslop. What text would you like me to edit to remove AI patterns and add human voice?
+
+$ claude -p "/unslop-not-a-real-skill"   [model claude-haiku-4-5]
+  is_error=False num_turns=0
+  result:
+    Unknown command: /unslop-not-a-real-skill

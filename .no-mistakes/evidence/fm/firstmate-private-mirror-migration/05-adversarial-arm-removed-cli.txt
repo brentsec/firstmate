@@ -1,0 +1,12 @@
+# Adversarial: delete the .agents/skills/*/LICENSE mapping arm, then drive the product
+
+removed the .agents/skills/*/LICENSE arm from bin/fm-test-run.sh
+
+$ printf "\n" >> .agents/skills/bro/LICENSE
+$ bin/fm-test-run.sh --list --changed --base HEAD
+fm-test-run: no changed-test mapping for source path: .agents/skills/bro/LICENSE
+(exit=2)
+
+$ bin/fm-test-run.sh --changed --base HEAD
+fm-test-run: no changed-test mapping for source path: .agents/skills/bro/LICENSE
+(exit=2)

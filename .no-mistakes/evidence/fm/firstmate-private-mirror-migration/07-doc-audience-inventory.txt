@@ -1,0 +1,14 @@
+# The inventory consumer: bin/fm-doc-audience-check.sh on the real repo
+
+$ bin/fm-doc-audience-check.sh
+fm-doc-audience-check: ok surfaces=102 local_links=399
+(exit=0)
+
+# Adversarial: drop the bro skill entry from docs/documentation-audiences.json
+removed the bro entry
+$ bin/fm-doc-audience-check.sh
+fm-doc-audience-check: unclassified: .agents/skills/bro/SKILL.md
+(exit=1)
+
+$ git status --porcelain
+(clean)
