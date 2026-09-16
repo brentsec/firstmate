@@ -6,7 +6,7 @@ This record holds reusable version-scoped evidence for the runner's active guara
 `docs/configuration.md` owns the operating contract, each script's header and `--help` own its mechanics, and `.agents/skills/process-event-sources/SKILL.md` owns the handling procedure.
 
 Verified on 2026-07-31 on macOS (Darwin 25.5.0) with `lavish-axi` 0.1.45 installed.
-The browser-silent live session guard was verified on 2026-09-13 on Linux against the real `lavish-axi` 0.1.45 CLI and server: every HTML open carried the provider's supported `LAVISH_AXI_NO_OPEN=1` or `--no-open` suppression, an unsuppressed open was refused by a test-local pass-through tripwire before the provider could launch a desktop browser, and the exact test session and detached answer listener ended before its temporary artifact was removed.
+The browser-silent live session guard was verified on 2026-09-13 on Linux against the real `lavish-axi` 0.1.45 CLI and server: every HTML open ran under the provider's supported `LAVISH_AXI_NO_OPEN=1` suppression, and the exact test session and detached answer listener ended before its temporary artifact was removed.
 Generic keyed-answer feed verified on 2026-08-16 on the same platform, against the same published poll response shape.
 Cross-origin keyed-answer feed verified on 2026-08-19 through the real runner and Lavish adapter interface.
 Trusted external `process-event-adapter/1` binding conformance and the runnable `file-signal` example were verified on 2026-08-27 on macOS (Darwin 25.5.0) with Node v25.9.0.

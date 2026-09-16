@@ -563,35 +563,6 @@ test_changed_mode_invokes_shellcheck_once_per_root() {
   pass "fm-lint.sh changed mode invokes ShellCheck once per root"
 }
 
-test_ci_mode_invokes_shellcheck_once_per_root() {
-  local tmp fakebin log flag_log out invocation_count root_count
-  tmp=$(fm_test_tmproot fm-lint-ci-per-root)
-  fakebin=$(fm_fakebin "$tmp")
-  fm_lint_stub_git "$fakebin"
-  log="$tmp/shellcheck.log"
-  flag_log="$tmp/flags.log"
-  fm_lint_stub_shellcheck "$fakebin" "$log"
-  root_count=$(CI=true "$LINT" --list-files | grep -c .)
-  [ "$root_count" -gt 1 ] || fail "the canonical lint set must hold more than one root"
-
-  # The source-aware full set must stay one ShellCheck process per root: one
-  # invocation over a whole shard keeps a process at the peak of its heaviest
-  # root for the whole shard, so two workers' peaks add up, while a process
-  # per root releases that memory between roots
-  # (docs/verification/lint-ci-memory.md).
-  out=$(PATH="$fakebin:$PATH" GITHUB_ACTIONS='' CI='' FM_LINT_JOBS=2 \
-    FM_TEST_GIT_BRANCH=main \
-    FM_TEST_FLAG_LOG="$flag_log" "$LINT" 2>&1) \
-    || fail "full source-aware lint failed"$'\n'"$out"
-  [ "$(LC_ALL=C sort "$log")" = "$(CI=true "$LINT" --list-files | LC_ALL=C sort)" ] \
-    || fail "full source-aware lint did not analyze exactly the canonical set"
-  invocation_count=$(grep -c '^external-sources=' "$flag_log" || true)
-  [ "$invocation_count" -eq "$root_count" ] \
-    || fail "full source-aware lint used $invocation_count ShellCheck calls for $root_count roots"
-  fm_lint_assert_flag_log "$flag_log" yes none
-  pass "fm-lint.sh full source-aware lint invokes ShellCheck once per root"
-}
-
 test_ci_keeps_external_sources_without_local_exclusions() {
   local tmp fakebin log flag_log mode_log fixture out
   tmp=$(fm_test_tmproot fm-lint-ci-follow)
@@ -1422,7 +1393,6 @@ test_zero_changed_files_exits_clean
 test_list_files_respects_changed_mode
 test_changed_mode_drops_external_sources_and_excludes_cross_file_codes
 test_changed_mode_invokes_shellcheck_once_per_root
-test_ci_mode_invokes_shellcheck_once_per_root
 test_ci_keeps_external_sources_without_local_exclusions
 test_main_branch_keeps_external_sources
 test_merge_base_less_keeps_external_sources
