@@ -52,5 +52,10 @@ test:
     that must always run.
     Never run `--all` or otherwise walk the entire tests/ suite locally:
     GitHub CI already owns full deterministic regression coverage.
+    Routine validation must never activate a test whose own `fm_live_gate`
+    (tests/lib.sh) classifies it as `opt-in`; a `default-on` guard stays
+    eligible like any other test. Those opt-in checks stay available for a
+    deliberate maintainer run outside routine validation, never as part of
+    judging or running tests for a branch.
   evidence:
     store_in_repo: true
