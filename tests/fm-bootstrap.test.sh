@@ -585,17 +585,8 @@ test_session_provider_backends_gate_own_cli_not_tmux() {
     printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
     printf '%s\n' "$backend" > "$case_dir/home/config/backend"
     # Toolchain has jq + treehouse but NOT the session CLI and NOT tmux.
-    # Hide the selected command explicitly because a maintainer may have it in
-    # /usr/bin, which remains on PATH for the shell and portable core tools.
     fakebin=$(make_fake_toolchain_no_tmux "$case_dir")
-    cat > "$case_dir/hide-command.sh" <<'SH'
-command() {
-  if [ "${1:-}" = -v ] && [ "${2:-}" = "$FM_TEST_HIDDEN_COMMAND" ]; then return 1; fi
-  builtin command "$@"
-}
-SH
     out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
-      BASH_ENV="$case_dir/hide-command.sh" FM_TEST_HIDDEN_COMMAND="$cli" \
       FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
     if [ "$backend" = herdr ]; then
       missing="MISSING_MANUAL: herdr (instructions: https://herdr.dev)"
