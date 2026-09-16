@@ -20,7 +20,7 @@
 #                 "SECONDMATE_SYNC: secondmate <id>: skipped: <reason>",
 #                 "NUDGE_SECONDMATES: secondmate <id>: send failed: <reason>",
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
-#                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed after <cause>: <reason>",
+#                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed after <cause>: <reason>|relaunch failed after <cause>: <reason>",
 #                 "SECONDMATE_HANDOFF: secondmate <id>: pending delivery: <n> item(s)",
 #                 "FMX: X mode on ..." or "FMX: X mode off ...".
 #          When a RUNNING secondmate home is fast-forwarded, its target is
@@ -681,6 +681,43 @@ report_relaunch() {  # <id> <cause> <where>
   echo "BOOTSTRAP_INFO: secondmate $1 relaunched after $2 ($3)"
 }
 
+# Seconds this sweep waits for a drifted mate's persist answer before it settles
+# for the honest nudge. The restart owner's own 900s default belongs to an
+# interactive /updatefirstmate pass; this sweep runs inside the deferred network
+# stage's aggregate budget (FM_STARTUP_NETWORK_TIMEOUT, 120s by default), so it
+# waits a startup-sized slice and lets the owner report a mate that is still
+# mid-turn instead of holding the whole stage behind it.
+SECONDMATE_DRIFT_PERSIST_WAIT=${FM_SECONDMATE_PERSIST_WAIT:-45}
+
+# A drifted worker is LIVE, which is the only population this sweep may replace
+# without a confirmed absence, so replacing it belongs to the persist-then-restart
+# owner rather than to a second lifecycle here: bin/fm-secondmate-restart.sh asks
+# the mate to write down the open work it holds only in conversation and stops
+# nothing until that mate's own correlated answer lands. It resolves placement
+# from the same durable record, so one call serves a local and a remote mate and
+# the remote profile, its effort token, and its Ultra guard stay owned in one
+# place. An unanswered mate keeps its agent and gets the ordinary re-read nudge,
+# and its reply expectation stays open for the pending-reply recovery ladder.
+secondmate_drift_restart() {  # <id> <where>
+  local id=$1 where=$2 out cause rc=0
+  cause="the live Claude process lacks the permission posture its launch recorded"
+  out=$(FM_SPAWN_NO_GUARD=1 FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+    FM_SECONDMATE_PERSIST_WAIT="$SECONDMATE_DRIFT_PERSIST_WAIT" \
+    "$SCRIPT_DIR/fm-secondmate-restart.sh" "$id" < /dev/null 2>&1) || rc=$?
+  case "$rc" in
+    0)
+      secondmate_note_respawned "$id"
+      report_relaunch "$id" "$cause" "$where"
+      ;;
+    3)
+      echo "SECONDMATE_LIVENESS: secondmate $id: skipped: not replaced after $cause ($where): $(first_line "$out")"
+      ;;
+    *)
+      echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
+      ;;
+  esac
+}
+
 secondmate_liveness_sweep() {
   # Idempotent secondmate liveness guarantee - SESSION START ONLY. The detailed
   # state machine and its only recovery-authorizing states are owned by
@@ -734,7 +771,6 @@ secondmate_liveness_one_timed() {  # <meta> <id> <label>
 secondmate_liveness_one() {  # <meta> <id>
   local meta=$1 id=$2
   local window harness backend target agent_state out cause remote_host remote_rc readiness_reason route_out remote_backend
-  local remote_harness remote_model remote_effort
   window=$(fm_meta_get "$meta" window)
   [ -n "$window" ] || return 0
   harness=$(fm_meta_get "$meta" harness)
@@ -800,33 +836,7 @@ secondmate_liveness_one() {  # <meta> <id>
         fi
         ;;
       permission-drift)
-        cause="the live Claude process lacks the permission posture its launch recorded"
-        remote_harness=$("$SCRIPT_DIR/fm-harness.sh" secondmate 2>/dev/null || true)
-        [ -n "$remote_harness" ] || remote_harness=$harness
-        remote_model=$("$SCRIPT_DIR/fm-harness.sh" secondmate-model 2>/dev/null || true)
-        remote_effort=$("$SCRIPT_DIR/fm-harness.sh" secondmate-effort 2>/dev/null || true)
-        # The same profile guards bin/fm-secondmate-restart.sh applies before a
-        # remote relaunch: an unrecognized effort token falls back to the
-        # default instead of being handed to a launch, and an Ultra pin is
-        # refused here, before anything on the host is stopped, unless the
-        # profile selects native Codex through Pi.
-        case "$remote_effort" in
-          ''|low|medium|high|xhigh|max|ultra) ;;
-          *) remote_effort="" ;;
-        esac
-        if [ "$remote_effort" = ultra ] \
-          && ! "$SCRIPT_DIR/fm-harness.sh" validate-native-effort "$remote_harness" "$remote_model" "$remote_effort" 2>/dev/null; then
-          echo "SECONDMATE_LIVENESS: secondmate $id: skipped: relaunch refused after $cause: the configured Ultra profile does not select native Codex through Pi (host=$remote_host)"
-          return 0
-        fi
-        if out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-on.sh" "$id" \
-          fm-remote-secondmate-control.sh relaunch "$id" "$remote_harness" \
-          "${remote_model:-default}" "${remote_effort:-default}" < /dev/null 2>&1); then
-          secondmate_note_respawned "$id"
-          report_relaunch "$id" "$cause" "host=$remote_host"
-        else
-          echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
-        fi
+        secondmate_drift_restart "$id" "host=$remote_host"
         ;;
       ambiguous|unreadable|unverified)
         echo "SECONDMATE_LIVENESS: secondmate $id: skipped: remote endpoint state is $agent_state on $remote_host"
@@ -866,14 +876,7 @@ secondmate_liveness_one() {  # <meta> <id>
       fi
       ;;
     permission-drift)
-      cause="the live Claude process lacks the permission posture its launch recorded"
-      if out=$(FM_SPAWN_NO_GUARD=1 FM_HOME="$FM_HOME" \
-        "$FM_ROOT/bin/fm-control.sh" "$id" relaunch 2>&1); then
-        secondmate_note_respawned "$id"
-        report_relaunch "$id" "$cause" "backend=$backend"
-      else
-        echo "SECONDMATE_LIVENESS: secondmate $id: relaunch failed after $cause: $(first_line "$out")"
-      fi
+      secondmate_drift_restart "$id" "backend=$backend"
       ;;
     ambiguous)
       echo "SECONDMATE_LIVENESS: secondmate $id: skipped: existing endpoint has ambiguous agent process (backend=$backend)"
