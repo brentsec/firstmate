@@ -24,6 +24,8 @@ Each row is one `CI=true bin/fm-lint.sh` run on the host above with the `ps` sam
 | candidate | one ShellCheck process per root | 9.5 GiB and 8.4 GiB (largest single roots) | 12.4 GiB | 418 s | exit 0 |
 
 The seed's five custom commits grew the largest source graphs by adding `bin/fm-claude-permission-lib.sh` and its dependencies to many roots (`bin/fm-watch.sh` 830 KiB to 896 KiB, `bin/fm-teardown.sh` 778 KiB to 841 KiB, `tests/fm-pending-reply.test.sh` 513 KiB to 576 KiB), which is why the seed needs more than the ancestor.
+That library and the code that sourced it were later removed from this branch, so `bin/fm-claude-permission-lib.sh` no longer exists in the tree and the sentence above, the seed row, and the candidate row all describe the earlier tree that still carried it.
+The current tree has not been re-measured, so no figure here is claimed for it; the rows stand as evidence about the commits they name.
 One process per root does not lower a worker's peak, because the peak is the largest single root either way; it lowers the concurrent sum because memory is returned between roots instead of staying at the shard's high-water mark, and it makes the peak of every root observable on its own.
 
 ## Memory cap reproduction

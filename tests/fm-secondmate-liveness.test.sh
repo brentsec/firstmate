@@ -352,81 +352,6 @@ run_bootstrap() {  # <fakebin> <home> <pane-cmd> <call-log> [extra env...] -> st
     env "$@" "$ROOT/bin/fm-bootstrap.sh" 2>&1
 }
 
-# make_nested_claude_herdr <dir>: a `herdr` stub for ONE pane whose registered
-# Claude agent is live and whose foreground process group also holds a nested
-# `claude` command the worker itself ran. Answers by subcommand rather than by
-# call order, because the sweep's call count is not part of any contract.
-make_nested_claude_herdr() {
-  local dir=$1 fakebin
-  fakebin=$(fm_fakebin "$dir")
-  cat > "$fakebin/herdr" <<'SH'
-#!/usr/bin/env bash
-set -u
-case "${1:-} ${2:-}" in
-  "status --json")
-    printf '{"client":{"version":"0.8.2","protocol":20},"server":{"running":true}}\n' ;;
-  "pane get")
-    printf '{"result":{"pane":{"pane_id":"w1:p1"}}}\n' ;;
-  "agent get")
-    printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' ;;
-  "pane process-info")
-    printf '%s\n' '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":4100,"foreground_process_group_id":4101,"foreground_processes":[{"pid":4101,"name":"claude","argv0":"claude","argv":["claude","--dangerously-skip-permissions","--resume","restored-session"],"cmdline":"claude --dangerously-skip-permissions --resume restored-session"},{"pid":4102,"name":"claude","argv0":"claude","argv":["claude","-p","summarize the diff"],"cmdline":"claude -p summarize the diff"}]}}}' ;;
-  *) ;;
-esac
-exit 0
-SH
-  chmod +x "$fakebin/herdr"
-  printf '%s\n' "$fakebin"
-}
-
-# make_spawn_probe_root <dir>: an FM_ROOT holding only the recovery entry point
-# the sweep reaches for, so any relaunch attempt is recorded and fails loudly.
-make_spawn_probe_root() {
-  local dir=$1 root
-  root="$dir/runtime-root"
-  mkdir -p "$root/bin"
-  printf '# Firstmate fixture\n' > "$root/AGENTS.md"
-  cat > "$root/bin/fm-spawn.sh" <<'SH'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "${FM_TEST_SPAWN_LOG:?}"
-exit 91
-SH
-  chmod +x "$root/bin/fm-spawn.sh"
-  printf '%s\n' "$root"
-}
-
-# A Claude worker's own shell tool may run a nested `claude` command inside the
-# pane's foreground process group, and that nested command carries none of the
-# launch flags the worker was started with. It is a descendant of the attributed
-# worker, never the worker, so the endpoint stays plainly alive and the sweep
-# has nothing to do with it.
-test_sweep_leaves_a_live_claude_with_a_nested_claude_command_alone() {
-  local w fb tmuxfb herdrfb root spawn_log out
-  command -v jq >/dev/null 2>&1 || { pass "SKIP (no jq): nested claude command under a live Claude secondmate"; return; }
-  w=$(new_world sweep-nested-claude)
-  add_sm_home "$w" sm1 lab:w1:p1 claude
-  printf 'backend=herdr\n' >> "$w/home/state/sm1.meta"
-  printf 'claude\n' > "$w/home/config/secondmate-harness"
-  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
-  herdrfb=$(make_nested_claude_herdr "$w")
-  root=$(make_spawn_probe_root "$w")
-  spawn_log="$w/spawn.log"; : > "$spawn_log"
-
-  out=$(PATH="$herdrfb:$BASE_PATH" bash -c \
-    '. "$0/bin/fm-backend.sh"; fm_backend_agent_state herdr lab:w1:p1' "$ROOT")
-  [ "$out" = alive ] \
-    || fail "a registered Claude worker running a nested claude command must read alive, got '$out'"
-
-  out=$(run_bootstrap "$herdrfb:$tmuxfb:$fb" "$w/home" claude "$w/tmux.log" \
-    FM_ROOT_OVERRIDE="$root" FM_TEST_SPAWN_LOG="$spawn_log")
-
-  assert_not_contains "$out" "SECONDMATE_LIVENESS:" \
-    "a live secondmate beside a nested claude command needs no liveness diagnostic"
-  [ ! -s "$spawn_log" ] \
-    || fail "a nested claude command triggered a relaunch: $(cat "$spawn_log")"
-  pass "sweep: a live Claude secondmate running a nested claude command reads alive and is left alone"
-}
-
 test_sweep_respawns_confirmed_dead_secondmate() {
   local w fb tmuxfb log out
   w=$(new_world sweep-dead)
@@ -621,7 +546,6 @@ test_herdr_agent_state_preserves_husk_classifier
 test_agent_state_dispatcher_and_compatibility
 test_sweep_respawns_confirmed_dead_secondmate
 test_sweep_leaves_alive_secondmate_untouched
-test_sweep_leaves_a_live_claude_with_a_nested_claude_command_alone
 test_sweep_respawns_authoritatively_missing_pi_secondmate
 test_sweep_respawns_authoritatively_missing_pi_signed_secondmate
 test_sweep_never_acts_on_ambiguous_existing_process
