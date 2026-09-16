@@ -189,6 +189,7 @@ Claude and grok use the slash form shown here; codex uses the same names with `$
 | `/bearings`        | Generate a concise four-section chat digest from bounded fleet state, including registered remote-home ledgers; use `/bearings file` to also replace today's dated report in `data/`, and add `include PRs` for live GitHub enrichment |
 | `/updatefirstmate` | Guardedly update the running firstmate and its secondmates - fast-forward, or reconcile a redundant post-squash-merge divergence - then persist and restart every live mate successfully left on the target commit - including already-current homes - with an honest re-read nudge only when restart cannot be proven |
 | `/stow`            | Sweep the session for uncaptured durable knowledge, persist the open work records this session knows are unfiled or now wrong, curate tiered startup memory with decay and cold archival, enforce each home's budget or surface the required decision, cascade to registered second mates, and report what is safe to reset |
+| `/bro`             | Restate firstmate's last reply in plain human language, with no jargon |
 
 Bearings invocation examples:
 
@@ -198,12 +199,13 @@ Bearings invocation examples:
 - `/bearings file include PRs` combines the dated report with live PR enrichment.
 
 Agent-only reference skills live under `.agents/skills/` and are loaded by firstmate at the trigger points named in [`AGENTS.md`](AGENTS.md).
+The bundled `unslop` writing skill is the one exception to that routing: it declares itself always-applicable, so the agent's own skill loader applies its AI-tell removal rules to any writing firstmate produces rather than waiting for a firstmate trigger.
 
 ### Two-tier skill layout
 
 Firstmate's skills live in two separate places with different audiences:
 
-- `.agents/skills/` - agent-loaded skills (this section's table, plus firstmate's agent-only reference skills). Every one of these assumes a live firstmate home and is meaningless, or actively misleading, installed anywhere else, so each carries `metadata.internal: true` in its frontmatter. That flag hides them from installer discovery (tools like the [skills.sh](https://skills.sh) `npx skills add` installer) without affecting how firstmate itself loads them - frontmatter metadata is inert to the agent's own skill loader.
+- `.agents/skills/` - agent-loaded skills (this section's table, plus firstmate's agent-only reference skills). Firstmate's own skills here assume a live firstmate home and are meaningless, or actively misleading, installed anywhere else, and the bundled `bro` and `unslop` writing skills are vendored third-party copies this repo uses rather than republishes, so each carries `metadata.internal: true` in its frontmatter. That flag hides them from installer discovery (tools like the [skills.sh](https://skills.sh) `npx skills add` installer) without affecting how firstmate itself loads them - frontmatter metadata is inert to the agent's own skill loader.
 - `skills/` - public, installer-facing skills meant to be installed standalone into any project, independent of firstmate.
   Each one is a self-contained skill with no dependency on firstmate's paths, tools, or vocabulary.
   Today that is `skills/stow`, a generic session-knowledge-sweep skill that routes findings by explicit instruction first, then existing local conventions, then a private `.stow-notes.md` fallback, and curates tiered entries through decay, local archival, and user-approved on-demand offload proposals.
@@ -241,3 +243,4 @@ Contributions are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the workf
 ## License
 
 MIT - see [LICENSE](LICENSE).
+The bundled `bro` and `unslop` writing skills are third-party MIT material vendored from the source each one's frontmatter records, and each keeps its own upstream copyright notice in `.agents/skills/<name>/LICENSE`.
