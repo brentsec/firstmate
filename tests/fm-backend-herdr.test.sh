@@ -620,7 +620,7 @@ test_policy_read_reuses_the_liveness_process_snapshot() {
 # contradiction. None of them may degrade the recovery-grade verdict, and only
 # the exact executable name `claude` is ever attributed.
 test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
-  local script_alone script_beside_agent helper_alone helper_beside_agent helper_beside_restored wrapper_alone argv_absent argv_absent_only
+  local script_alone script_beside_agent helper_alone helper_beside_agent helper_beside_restored wrapper_alone argv_absent argv_absent_only argv_empty
   script_alone=$(claude_permission_state_case bypass \
     '[{"pid":4243,"name":"bash","argv0":"/repo/bin/fm-claude-trust.sh","argv":["/repo/bin/fm-claude-trust.sh"]}]')
   script_beside_agent=$(claude_permission_state_case bypass \
@@ -637,6 +637,12 @@ test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
     '[{"pid":4243,"name":"node","argv0":"claude"}]')
   argv_absent_only=$(claude_permission_state_case bypass \
     '[{"pid":4243,"name":"node","argv0":"claude","argv":null}]')
+  # A command line the provider could not read (a leader caught defunct
+  # mid-exit still named claude) arrives as an empty array: no flag evidence
+  # either way, so it is unreadable like a malformed argv, never a drift that
+  # would license an automatic relaunch.
+  argv_empty=$(claude_permission_state_case bypass \
+    '[{"pid":4243,"name":"node","argv0":"claude","argv":[]}]')
 
   [ "$script_alone" = alive ] \
     || fail "a claude-named script must not be attributed as the worker, got '$script_alone'"
@@ -654,7 +660,9 @@ test_claude_attribution_needs_exact_identity_and_never_degrades_liveness() {
     || fail "a build that reports no argv must keep its liveness verdict, got '$argv_absent'"
   [ "$argv_absent_only" = alive ] \
     || fail "an explicitly null argv must keep its liveness verdict, got '$argv_absent_only'"
-  pass "Herdr Claude attribution accepts only the exact executable name and an absent argv never degrades liveness"
+  [ "$argv_empty" = alive ] \
+    || fail "an empty argv carries no flag evidence and must stay alive rather than read as drift, got '$argv_empty'"
+  pass "Herdr Claude attribution accepts only the exact executable name and an absent, null, or empty argv never degrades liveness"
 }
 
 # --- stale agent registration over a shell-only pane (issue #4115) -----------

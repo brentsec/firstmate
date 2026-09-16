@@ -22,7 +22,7 @@ The policy-aware Herdr recovery state checks the exact foreground argv against t
 One attributed Claude process missing that recorded flag reads `permission-drift` and must be replaced through `FM_HOME=<active-home> bin/fm-control.sh <task-id> relaunch --note '<progress>'`, which preserves the endpoint, local copy, and unfinished work while `bin/fm-spawn.sh` reapplies the flag and records the mode it launched with.
 A secondmate needs no note and its startup recovery uses that same control plane automatically.
 The posture is read from the pane's top-level Claude process only, so a nested `claude` command the worker runs from its own shell tool is never attributed; that one process carrying both permission flags is ambiguous and refuses recovery, so reconcile ownership without typing or launching anything.
-A record without a recorded mode, a failed or malformed process read, or a build that reports no argv is not drift evidence and leaves the endpoint's proven live state untouched.
+A record without a recorded mode, a failed or malformed process read, or a build that reports no argv or an empty one is not drift evidence and leaves the endpoint's proven live state untouched.
 A temporary non-Claude foreground tool is not drift, and a flattened command line or pane footer is not flag evidence because the worker prompt may contain the same text.
 
 This permission posture controls worker command approval only.

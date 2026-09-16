@@ -22,7 +22,10 @@
 # Flattened command text is deliberately not accepted because a worker prompt
 # may itself mention either permission flag and create false evidence, and an
 # unreadable read is an observability gap the recovery-grade callers never
-# treat as drift.
+# treat as drift. An empty argv is unreadable too, never drift: a provider
+# that could not read a command line (a leader caught defunct mid-exit still
+# named claude) reports no flag evidence either way, and a drift verdict
+# licenses an automatic relaunch.
 #
 # This posture grants command autonomy only inside the worker.
 # It does not grant merge authority or permission for destructive,
@@ -104,7 +107,7 @@ fm_claude_argv_permission_state() {  # <bypass|auto> <argv-json>
   case "$mode" in bypass|auto) ;; *) printf 'unreadable'; return 0 ;; esac
   command -v jq >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
   printf '%s' "$argv" | jq -r --arg mode "$mode" '
-    if type != "array" or any(.[]; type != "string") then
+    if type != "array" or length == 0 or any(.[]; type != "string") then
       "unreadable"
     else
       ([.[] | select(. == "--dangerously-skip-permissions")] | length > 0) as $bypass

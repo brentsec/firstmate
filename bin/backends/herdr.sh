@@ -2240,12 +2240,13 @@ EOF
 #
 # A protocol build that exposes no `argv` array at all is an observability gap,
 # not a contradiction: the posture is `unobserved` there, exactly as a
-# non-Claude top-level process is. An argv that IS present but is not an array
-# of strings, a snapshot without a numeric foreground process group id or one
-# that lists that pid more than once, a failed or stalled read, or a response
-# describing another pane is `unreadable`: also an observability gap, never
-# evidence of drift, and the recovery-grade caller keeps a positively proven
-# live endpoint alive across it so lifecycle control stays available.
+# non-Claude top-level process is. An argv that IS present but is empty or is
+# not an array of strings, a snapshot without a numeric foreground process
+# group id or one that lists that pid more than once, a failed or stalled
+# read, or a response describing another pane is `unreadable`: also an
+# observability gap, never evidence of drift, and the recovery-grade caller
+# keeps a positively proven live endpoint alive across it so lifecycle control
+# stays available.
 #
 # The identity scan is ONE jq pass over the payload that projects only the
 # top-level worker's row: a watcher runs this for every Claude window on every
