@@ -1,0 +1,23 @@
+parsed keys:             ['commands', 'disable_project_settings', 'document', 'test']
+commands.lint:           'bin/fm-lint.sh'
+commands.test:           None (absent -> Test stays intent-targeted)
+test.evidence:           {'store_in_repo': True}
+test.instructions type:  str len 965
+
+--- test.instructions delivered to the Test step ---
+Judge which executable behavioral tests actually exercise this branch's
+changed behavior, then run only those. Prefer the narrowest selection that
+still covers the change, such as the single subject script the diff touches
+(`bin/fm-test-run.sh tests/<subject>.test.sh`).
+When the relevant tests are unclear, `bin/fm-test-run.sh --changed`
+(documented in CONTRIBUTING.md) is available as an optional upper bound to
+consult and narrow down from; it is never a required floor and never a step
+that must always run.
+Never run `--all` or otherwise walk the entire tests/ suite locally:
+GitHub CI already owns full deterministic regression coverage.
+Routine validation must never activate a test whose own `fm_live_gate`
+(tests/lib.sh) classifies it as `opt-in`; a `default-on` guard stays
+eligible like any other test. Those opt-in checks stay available for a
+deliberate maintainer run outside routine validation, never as part of
+judging or running tests for a branch.
+

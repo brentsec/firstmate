@@ -1,0 +1,27 @@
+Routine validation under the branch policy (no FM_* live variables set, NO_MISTAKES_GATE=1)
+Runner: bin/fm-test-run.sh, host has herdr/claude/jq/curl/pi/node installed
+
+SCRIPT                                               POLICY      RAN   GATE-SKIP REASON
+fm-afk-pi-herdr-return-e2e.test.sh                   opt-in      no    live: opt-in; set FM_AFK_PI_HERDR_E2E=1 to run
+fm-agy-signals-live-e2e.test.sh                      opt-in      no    live: opt-in; set FM_AGY_SIGNALS_LIVE=1 to run
+fm-claude-stop-autoarm-live-e2e.test.sh              opt-in      no    live: opt-in; set FM_CLAUDE_LIVE_E2E=1 to run
+fm-cmux-claude-composer-live-e2e.test.sh             opt-in      no    live: opt-in; set FM_CMUX_CLAUDE_COMPOSER_LIVE=1 to run
+fm-codex-continuity-live-e2e.test.sh                 opt-in      no    live: opt-in; set FM_CODEX_LIVE_E2E=1 to run
+fm-composer-matrix-live-e2e.test.sh                  opt-in      no    live: opt-in; set FM_COMPOSER_MATRIX_LIVE=1 to run
+fm-cursor-primary-live-e2e.test.sh                   opt-in      no    live: opt-in; set FM_CURSOR_PRIMARY_LIVE_E2E=1 to run
+fm-grok-continuity-live-e2e.test.sh                  opt-in      no    live: opt-in; set FM_GROK_LIVE_E2E=1 to run
+fm-grok-stop-live-e2e.test.sh                        opt-in      no    live: opt-in; set FM_GROK_STOP_LIVE_E2E=1 to run
+fm-harness-adapter-instructions-live-e2e.test.sh     opt-in      no    live: opt-in; set FM_HARNESS_ADAPTER_INSTRUCTION_EVAL=1 to run
+fm-herdr-submit-confirm-live-e2e.test.sh             opt-in      no    live: opt-in; set FM_HERDR_SUBMIT_CONFIRM_LIVE=1 to run
+fm-muse-signals-live-e2e.test.sh                     opt-in      no    live: opt-in; set FM_MUSE_SIGNALS_LIVE=1 to run
+fm-omp-primary-live-e2e.test.sh                      opt-in      no    live: opt-in; set FM_OMP_LIVE_E2E=1 to run
+fm-opencode-primary-live-e2e.test.sh                 opt-in      no    live: opt-in; set FM_OPENCODE_LIVE_E2E=1 to run
+fm-pi-branch-live-e2e.test.sh                        opt-in      no    live: opt-in; set FM_PI_BRANCH_LIVE_E2E=1 to run
+fm-pi-primary-live-e2e.test.sh                       opt-in      no    live: opt-in; set FM_PI_LIVE_E2E=1 to run
+fm-quota-array-dispatch-live-e2e.test.sh             opt-in      no    live: opt-in; set FM_QUOTA_ARRAY_DISPATCH_LIVE_E2E=1 to run
+fm-rovo-signals-live-e2e.test.sh                     opt-in      no    live: opt-in; set FM_ROVO_SIGNALS_LIVE=1 to run
+fm-send-inbox-doorbell-live-e2e.test.sh              opt-in      no    live: opt-in; set FM_SEND_INBOX_LIVE_E2E=1 to run
+fm-send-secondmate-marker-herdr-e2e.test.sh          opt-in      no    live: opt-in; set FM_SEND_MARKER_HERDR_E2E=1 to run
+fm-sessionstart-hook-live-e2e.test.sh                opt-in      no    live: opt-in; set FM_SESSIONSTART_HOOK_LIVE_E2E=1 to run
+fm-sessionstart-instruction-refresh-live-e2e.test.sh opt-in      no    live: opt-in; set FM_SESSIONSTART_INSTRUCTION_REFRESH_LIVE_E2E=1 to run
+fm-herdr-version-floor-live-e2e.test.sh              default-on  YES   

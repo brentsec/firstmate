@@ -1,0 +1,220 @@
+{
+  "families": [
+    {
+      "count": 22,
+      "duration_ms": 324,
+      "failed": 0,
+      "name": "live-harness-optin"
+    }
+  ],
+  "finished_at": "2026-09-16T05:03:10Z",
+  "run_id": "fm-test-run-1789534989955-3703911",
+  "scripts": [
+    {
+      "duration_ms": 17,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_AFK_PI_HERDR_E2E=1 to run",
+      "path": "tests/fm-afk-pi-herdr-return-e2e.test.sh"
+    },
+    {
+      "duration_ms": 17,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_AGY_SIGNALS_LIVE=1 to run",
+      "path": "tests/fm-agy-signals-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_CLAUDE_LIVE_E2E=1 to run",
+      "path": "tests/fm-claude-stop-autoarm-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 17,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_CMUX_CLAUDE_COMPOSER_LIVE=1 to run",
+      "path": "tests/fm-cmux-claude-composer-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_CODEX_LIVE_E2E=1 to run",
+      "path": "tests/fm-codex-continuity-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 17,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_COMPOSER_MATRIX_LIVE=1 to run",
+      "path": "tests/fm-composer-matrix-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_CURSOR_PRIMARY_LIVE_E2E=1 to run",
+      "path": "tests/fm-cursor-primary-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_GROK_LIVE_E2E=1 to run",
+      "path": "tests/fm-grok-continuity-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_GROK_STOP_LIVE_E2E=1 to run",
+      "path": "tests/fm-grok-stop-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 16,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_HARNESS_ADAPTER_INSTRUCTION_EVAL=1 to run",
+      "path": "tests/fm-harness-adapter-instructions-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 15,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_HERDR_SUBMIT_CONFIRM_LIVE=1 to run",
+      "path": "tests/fm-herdr-submit-confirm-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 14,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_MUSE_SIGNALS_LIVE=1 to run",
+      "path": "tests/fm-muse-signals-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_OMP_LIVE_E2E=1 to run",
+      "path": "tests/fm-omp-primary-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_OPENCODE_LIVE_E2E=1 to run",
+      "path": "tests/fm-opencode-primary-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_PI_BRANCH_LIVE_E2E=1 to run",
+      "path": "tests/fm-pi-branch-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_PI_LIVE_E2E=1 to run",
+      "path": "tests/fm-pi-primary-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_QUOTA_ARRAY_DISPATCH_LIVE_E2E=1 to run",
+      "path": "tests/fm-quota-array-dispatch-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_ROVO_SIGNALS_LIVE=1 to run",
+      "path": "tests/fm-rovo-signals-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_SEND_INBOX_LIVE_E2E=1 to run",
+      "path": "tests/fm-send-inbox-doorbell-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 14,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_SEND_MARKER_HERDR_E2E=1 to run",
+      "path": "tests/fm-send-secondmate-marker-herdr-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_SESSIONSTART_HOOK_LIVE_E2E=1 to run",
+      "path": "tests/fm-sessionstart-hook-live-e2e.test.sh"
+    },
+    {
+      "duration_ms": 13,
+      "exit": 0,
+      "expected_gate_skip": "live-capability",
+      "family": "live-harness-optin",
+      "gate_skip": true,
+      "gate_skip_reason": "live: opt-in; set FM_SESSIONSTART_INSTRUCTION_REFRESH_LIVE_E2E=1 to run",
+      "path": "tests/fm-sessionstart-instruction-refresh-live-e2e.test.sh"
+    }
+  ],
+  "selection": "scripts;jobs=1",
+  "started_at": "2026-09-16T05:03:09Z",
+  "summary": {
+    "duration_ms": 606,
+    "failed": 0,
+    "skipped_gate": 22,
+    "total": 22
+  }
+}

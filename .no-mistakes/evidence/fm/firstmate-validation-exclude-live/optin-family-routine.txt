@@ -1,0 +1,106 @@
+FM_TEST_BEGIN 2026-09-16T05:03:09Z tests/fm-afk-pi-herdr-return-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_AFK_PI_HERDR_E2E=1 to run
+fm-test-run: gate skip: tests/fm-afk-pi-herdr-return-e2e.test.sh: live: opt-in; set FM_AFK_PI_HERDR_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-afk-pi-herdr-return-e2e.test.sh exit=0 duration_ms=17 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-agy-signals-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_AGY_SIGNALS_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-agy-signals-live-e2e.test.sh: live: opt-in; set FM_AGY_SIGNALS_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-agy-signals-live-e2e.test.sh exit=0 duration_ms=17 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-claude-stop-autoarm-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_CLAUDE_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-claude-stop-autoarm-live-e2e.test.sh: live: opt-in; set FM_CLAUDE_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-claude-stop-autoarm-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-cmux-claude-composer-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_CMUX_CLAUDE_COMPOSER_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-cmux-claude-composer-live-e2e.test.sh: live: opt-in; set FM_CMUX_CLAUDE_COMPOSER_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-cmux-claude-composer-live-e2e.test.sh exit=0 duration_ms=17 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-codex-continuity-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_CODEX_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-codex-continuity-live-e2e.test.sh: live: opt-in; set FM_CODEX_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-codex-continuity-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-composer-matrix-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_COMPOSER_MATRIX_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-composer-matrix-live-e2e.test.sh: live: opt-in; set FM_COMPOSER_MATRIX_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-composer-matrix-live-e2e.test.sh exit=0 duration_ms=17 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-cursor-primary-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_CURSOR_PRIMARY_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-cursor-primary-live-e2e.test.sh: live: opt-in; set FM_CURSOR_PRIMARY_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-cursor-primary-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-grok-continuity-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_GROK_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-grok-continuity-live-e2e.test.sh: live: opt-in; set FM_GROK_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-grok-continuity-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-grok-stop-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_GROK_STOP_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-grok-stop-live-e2e.test.sh: live: opt-in; set FM_GROK_STOP_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-grok-stop-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-harness-adapter-instructions-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_HARNESS_ADAPTER_INSTRUCTION_EVAL=1 to run
+fm-test-run: gate skip: tests/fm-harness-adapter-instructions-live-e2e.test.sh: live: opt-in; set FM_HARNESS_ADAPTER_INSTRUCTION_EVAL=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-harness-adapter-instructions-live-e2e.test.sh exit=0 duration_ms=16 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-herdr-submit-confirm-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_HERDR_SUBMIT_CONFIRM_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-herdr-submit-confirm-live-e2e.test.sh: live: opt-in; set FM_HERDR_SUBMIT_CONFIRM_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-herdr-submit-confirm-live-e2e.test.sh exit=0 duration_ms=15 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-muse-signals-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_MUSE_SIGNALS_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-muse-signals-live-e2e.test.sh: live: opt-in; set FM_MUSE_SIGNALS_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-muse-signals-live-e2e.test.sh exit=0 duration_ms=14 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-omp-primary-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_OMP_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-omp-primary-live-e2e.test.sh: live: opt-in; set FM_OMP_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-omp-primary-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-opencode-primary-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_OPENCODE_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-opencode-primary-live-e2e.test.sh: live: opt-in; set FM_OPENCODE_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-opencode-primary-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-pi-branch-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_PI_BRANCH_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-pi-branch-live-e2e.test.sh: live: opt-in; set FM_PI_BRANCH_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-pi-branch-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-pi-primary-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_PI_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-pi-primary-live-e2e.test.sh: live: opt-in; set FM_PI_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-pi-primary-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-quota-array-dispatch-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_QUOTA_ARRAY_DISPATCH_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-quota-array-dispatch-live-e2e.test.sh: live: opt-in; set FM_QUOTA_ARRAY_DISPATCH_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-quota-array-dispatch-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-rovo-signals-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_ROVO_SIGNALS_LIVE=1 to run
+fm-test-run: gate skip: tests/fm-rovo-signals-live-e2e.test.sh: live: opt-in; set FM_ROVO_SIGNALS_LIVE=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-rovo-signals-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-send-inbox-doorbell-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_SEND_INBOX_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-send-inbox-doorbell-live-e2e.test.sh: live: opt-in; set FM_SEND_INBOX_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-send-inbox-doorbell-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-send-secondmate-marker-herdr-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_SEND_MARKER_HERDR_E2E=1 to run
+fm-test-run: gate skip: tests/fm-send-secondmate-marker-herdr-e2e.test.sh: live: opt-in; set FM_SEND_MARKER_HERDR_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-send-secondmate-marker-herdr-e2e.test.sh exit=0 duration_ms=14 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-sessionstart-hook-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_SESSIONSTART_HOOK_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-sessionstart-hook-live-e2e.test.sh: live: opt-in; set FM_SESSIONSTART_HOOK_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-sessionstart-hook-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_BEGIN 2026-09-16T05:03:10Z tests/fm-sessionstart-instruction-refresh-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+skip: live: opt-in; set FM_SESSIONSTART_INSTRUCTION_REFRESH_LIVE_E2E=1 to run
+fm-test-run: gate skip: tests/fm-sessionstart-instruction-refresh-live-e2e.test.sh: live: opt-in; set FM_SESSIONSTART_INSTRUCTION_REFRESH_LIVE_E2E=1 to run
+FM_TEST_END 2026-09-16T05:03:10Z tests/fm-sessionstart-instruction-refresh-live-e2e.test.sh exit=0 duration_ms=13 gate_skip=true
+FM_TEST_SUMMARY total=22 failed=0 skipped_gate=22 duration_ms=606
+FM_TEST_SUMMARY_FAMILY family=live-harness-optin count=22 duration_ms=324 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-afk-pi-herdr-return-e2e.test.sh duration_ms=17
+FM_TEST_SLOWEST rank=2 script=tests/fm-agy-signals-live-e2e.test.sh duration_ms=17
+FM_TEST_SLOWEST rank=3 script=tests/fm-cmux-claude-composer-live-e2e.test.sh duration_ms=17
+FM_TEST_SLOWEST rank=4 script=tests/fm-composer-matrix-live-e2e.test.sh duration_ms=17
+FM_TEST_SLOWEST rank=5 script=tests/fm-claude-stop-autoarm-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=6 script=tests/fm-codex-continuity-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=7 script=tests/fm-cursor-primary-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=8 script=tests/fm-grok-continuity-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=9 script=tests/fm-grok-stop-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=10 script=tests/fm-harness-adapter-instructions-live-e2e.test.sh duration_ms=16
+FM_TEST_SLOWEST rank=11 script=tests/fm-herdr-submit-confirm-live-e2e.test.sh duration_ms=15
+FM_TEST_SLOWEST rank=12 script=tests/fm-muse-signals-live-e2e.test.sh duration_ms=14
+FM_TEST_SLOWEST rank=13 script=tests/fm-send-secondmate-marker-herdr-e2e.test.sh duration_ms=14
+FM_TEST_SLOWEST rank=14 script=tests/fm-omp-primary-live-e2e.test.sh duration_ms=13
+FM_TEST_SLOWEST rank=15 script=tests/fm-opencode-primary-live-e2e.test.sh duration_ms=13
+fm-test-run: wrote timing artifact: /home/mux/.no-mistakes/evidence/01M2M7T3ZCVZPK6XGK3TCFF3BX/optin-family-routine.json
