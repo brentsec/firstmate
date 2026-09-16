@@ -2132,6 +2132,33 @@ test_remote_dead_reports_remote_verdict() {
   pass "fm-crew-state remote: the remote host's own dead verdict is reported truthfully"
 }
 
+# A drifted remote mate is repaired on its own host: bin/fm-control.sh refuses
+# every lifecycle verb for a remotely placed secondmate by name, so this reader
+# must name the remote route its two owners use - bin/fm-spawn.sh <id>
+# --secondmate and the startup liveness sweep - and never the local relaunch.
+test_remote_permission_drift_names_the_remote_repair_path() {
+  reset_fakes
+  local d out rc control_rc control_out
+  d=$(setup_remote_case remote-drift)
+  make_fakebin "$d" >/dev/null
+  out=$(FM_FAKE_REMOTE_STATE_OUT=permission-drift FM_FAKE_SSH_RC=0 run_remote_crew_state "$d" rsm); rc=$?
+  expect_code 0 "$rc" "remote permission drift exits 0"
+  assert_contains "$out" "lacks the permission posture its launch recorded" \
+    "the remote reader must name the permission drift"
+  assert_contains "$out" "remote-mac" "the remote verdict must name the host it came from"
+  assert_contains "$out" "bin/fm-spawn.sh rsm --secondmate" \
+    "the remote reader must name the remote repair path for this task"
+  assert_not_contains "$out" "unknown-remote" \
+    "a conclusive remote posture verdict must not be labeled unknown-remote"
+  control_out=$(FM_HOME="$d" FM_STATE_OVERRIDE="$d/state" \
+    "$ROOT/bin/fm-control.sh" rsm relaunch 2>&1); control_rc=$?
+  [ "$control_rc" -ne 0 ] \
+    || fail "fm-control relaunch must refuse a remotely placed secondmate, so the reader may not advise it"
+  assert_contains "$control_out" "remotely placed secondmate" \
+    "the refusal must be the remote-placement refusal, not an unrelated failure"
+  pass "fm-crew-state remote: a drifted remote mate is pointed at the repair path that actually works"
+}
+
 # A remote host's own conclusive posture verdict is evidence about the worker,
 # not about the transport. It must carry the same reconcile-before-lifecycle
 # wording the local arm, startup, monitoring, and control use, and must never
@@ -2701,6 +2728,7 @@ test_remote_alive_with_log_uses_status_log
 test_remote_alive_idle_is_healthy_not_gone
 test_remote_unreachable_is_unknown_remote_not_dead
 test_remote_dead_reports_remote_verdict
+test_remote_permission_drift_names_the_remote_repair_path
 test_remote_ambiguous_posture_is_not_an_unreachable_reading
 test_missing_meta
 test_provably_working_via_runs_list_fallback
