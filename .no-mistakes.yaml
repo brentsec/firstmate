@@ -33,8 +33,21 @@ document:
 commands:
   lint: 'bin/fm-lint.sh'
 
-# Publish each run's test evidence to the orphan no-mistakes/evidence branch linked from the PR.
-# The evidence is not committed to the feature or default branch.
+# Trusted Test-step policy: keep local validation focused on the branch diff.
+# GitHub CI (.github/workflows/ci.yml) already runs the complete deterministic
+# regression suite on every push, so walking that same suite again locally
+# only burns the local fix-round time budget without adding coverage.
+# Publish each run's test evidence to the orphan no-mistakes/evidence branch
+# linked from the PR; the evidence is not committed to the feature or
+# default branch.
 test:
+  instructions: |
+    Run `bin/fm-test-run.sh --changed` (documented in CONTRIBUTING.md) to
+    select and execute only the executable behavioral tests relevant to this
+    branch's diff, plus any other test that directly exercises the changed
+    behavior if the mapping misses it. Record the exact command run and its
+    pass/fail output as evidence before reporting the step done.
+    Never run `--all` or otherwise walk the entire tests/ suite locally:
+    GitHub CI already owns full deterministic regression coverage.
   evidence:
     store_in_repo: true
